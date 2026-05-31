@@ -85,10 +85,15 @@ export default function Login() {
           </p>
 
           {error === "auth_failed" && (
-            <p className="text-xs mb-4" style={{ color: "#EA4335" }}>
-              Sign-in failed. Please try again.
-            </p>
-          )}
+  <p className="text-xs mb-4" style={{ color: "#EA4335" }}>
+    Sign-in failed. Please try again.
+  </p>
+)}
+{error === "not_invited" && (
+  <p className="text-xs mb-4" style={{ color: "#EA4335" }}>
+    Your email is not authorised to access this workspace. Contact your admin to get access.
+  </p>
+)}
 
           {isDevMode ? (
             <form onSubmit={handleDevLogin}>
