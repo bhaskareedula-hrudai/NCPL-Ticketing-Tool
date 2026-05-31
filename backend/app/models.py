@@ -44,3 +44,9 @@ class DepartmentIn(BaseModel):
 class EmployeePatch(BaseModel):
     role: Optional[Literal["admin", "employee"]] = None
     department: Optional[str] = None
+
+class EmployeeCreate(BaseModel):
+    email: str
+    name: Optional[str] = None
+    role: Literal["admin", "employee"] = "employee"
+    department: Optional[str] = None
