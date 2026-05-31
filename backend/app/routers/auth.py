@@ -66,14 +66,21 @@ def google_oauth_callback(
         logging.getLogger("ncpl").error("OAuth failed: %s | Google says: %s", exc, body)
         return RedirectResponse(f"{config.FRONTEND_URL}/login?error=auth_failed")
 
-        email = profile["email"].lower()
+    # ← email must be here, OUTSIDE the except block
+    email = profile.get("email", "").lower()
+    if not email:
+        return RedirectResponse(f"{config.FRONTEND_URL}/login?error=auth_failed")
 
     # Block sign-in if email is not pre-approved by admin
-    conn = connect()
-    existing = one(conn, "SELECT user_id FROM users WHERE email=?", (email,))
-    conn.close()
-    if not existing and email not in config.ADMIN_EMAILS:
-        return RedirectResponse(f"{config.FRONTEND_URL}/login?error=not_invited")
+    try:
+        conn = connect()
+        existing = one(conn, "SELECT user_id FROM users WHERE email=?", (email,))
+        conn.close()
+        if not existing and email not in config.ADMIN_EMAILS:
+            return RedirectResponse(f"{config.FRONTEND_URL}/login?error=not_invited")
+    except Exception:
+        if email not in config.ADMIN_EMAILS:
+            return RedirectResponse(f"{config.FRONTEND_URL}/login?error=auth_failed")
 
     resp = RedirectResponse(f"{config.FRONTEND_URL}/auth/callback")
     try:
