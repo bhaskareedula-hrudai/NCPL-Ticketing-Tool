@@ -1,0 +1,137 @@
+import React from "react";
+import { NavLink } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import { api } from "@/lib/api";
+import { useAsync } from "@/hooks/useAsync";
+import TicketTable from "@/components/common/TicketTable";
+import { ArrowUpRight, CircleNotch } from "@phosphor-icons/react";
+import { timeAgo, greeting } from "@/lib/utils";
+import { STATUS_CHART_COLORS, DEPT_COLORS } from "@/lib/constants";
+import {
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Cell,
+} from "recharts";
+
+const AXIS_TICK   = { fontSize: 11, fill: "#8C8C8C" };
+const LABEL_TICK  = { fontSize: 11, fill: "#595959" };
+const TOOLTIP_STYLE = { background: "#fff", border: "1px solid #E5E2DC", borderRadius: 6, fontSize: 12 };
+
+export default function Dashboard() {
+  const { user } = useAuth();
+
+  const { data: stats, loading: statsLoading } = useAsync(
+    () => api.get("/dashboard/stats").then((r) => r.data),
+    [],
+  );
+  const { data: recentTickets, loading: ticketsLoading } = useAsync(
+    () => api.get("/tickets", { params: { scope: "active" } }).then((r) => r.data.slice(0, 8)),
+    [],
+  );
+
+  if (statsLoading || ticketsLoading) {
+    return (
+      <div className="p-8 flex items-center gap-2 mono-label">
+        <CircleNotch className="animate-spin" /> Loading dashboard…
+      </div>
+    );
+  }
+
+  const kpis = [
+    { label: "Total Tickets",  value: stats.total,        hint: "All time" },
+    { label: "Active",         value: stats.active,       hint: "Open · In Progress · Pending" },
+    { label: "Unassigned",     value: stats.unassigned,   hint: "Need triage" },
+    { label: "High Priority",  value: stats.high_priority,hint: "Open High/Urgent" },
+    { label: "Resolved",       value: stats.resolved,     hint: "Awaiting closure" },
+    { label: "Escalated",      value: stats.escalated,    hint: "Flagged" },
+  ];
+
+  return (
+    <div className="p-6 md:p-8 max-w-[1400px]" data-testid="dashboard-page">
+      <div className="flex items-end justify-between mb-8">
+        <div>
+          <div className="mono-label mb-2">
+            Overview · {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+          </div>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight" style={{ fontFamily: "Cabinet Grotesk" }}>
+            Good {greeting()}, {user?.name?.split(" ")[0]}.
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+            Your operations snapshot across all departments.
+          </p>
+        </div>
+        <NavLink to="/tickets/new" className="btn-primary" data-testid="header-new-ticket">
+          + New Ticket
+        </NavLink>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        {kpis.map((k) => (
+          <div key={k.label} className="stat-card" data-testid={`kpi-${k.label.toLowerCase().replace(/\s+/g, "-")}`}>
+            <div className="mono-label">{k.label}</div>
+            <div className="mt-2 text-3xl font-semibold" style={{ fontFamily: "Cabinet Grotesk", letterSpacing: "-0.02em" }}>{k.value}</div>
+            <div className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>{k.hint}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+        <div className="card-flat p-5 lg:col-span-2">
+          <div className="mono-label mb-1">Last 7 Days</div>
+          <h3 className="text-lg font-medium mb-4" style={{ fontFamily: "Cabinet Grotesk" }}>Tickets Created</h3>
+          <div style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={stats.trend_7d}>
+                <defs>
+                  <linearGradient id="grad7d" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="#3A4B59" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#3A4B59" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="2 4" stroke="#E5E2DC" vertical={false} />
+                <XAxis dataKey="date" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Area type="monotone" dataKey="count" stroke="#3A4B59" strokeWidth={2} fill="url(#grad7d)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="card-flat p-5">
+          <div className="mono-label mb-1">Breakdown</div>
+          <h3 className="text-lg font-medium mb-4" style={{ fontFamily: "Cabinet Grotesk" }}>By Status</h3>
+          <div style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.by_status} layout="vertical" margin={{ left: 8 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="#E5E2DC" horizontal={false} />
+                <XAxis type="number" tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis dataKey="status" type="category" tick={LABEL_TICK} axisLine={false} tickLine={false} width={80} />
+                <Tooltip cursor={{ fill: "#FAF9F6" }} contentStyle={TOOLTIP_STYLE} />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                  {stats.by_status.map((e) => <Cell key={e.status} fill={STATUS_CHART_COLORS[e.status] || "#3A4B59"} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="card-flat overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+          <div>
+            <div className="mono-label">Queue</div>
+            <h3 className="text-lg font-medium mt-1" style={{ fontFamily: "Cabinet Grotesk" }}>Recently Active</h3>
+          </div>
+          <NavLink to="/tickets" className="text-sm flex items-center gap-1" style={{ color: "var(--brand-primary)" }} data-testid="view-all-tickets-link">
+            View all <ArrowUpRight size={14} />
+          </NavLink>
+        </div>
+        <TicketTable
+          tickets={recentTickets || []}
+          emptyTitle="Nothing Active"
+          emptyDescription="Your queue is clear. Great work."
+        />
+      </div>
+    </div>
+  );
+}
