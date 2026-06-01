@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { useAsync } from "@/hooks/useAsync";
 import { TICKET_PRIORITIES } from "@/lib/constants";
 import { toast } from "sonner";
-import { CircleNotch, ArrowLeft } from "@phosphor-icons/react";
+import { CircleNotch, ArrowLeft, WarningCircle } from "@phosphor-icons/react";
 
 const INITIAL_FORM = { title: "", description: "", department: "", priority: "Medium", assignee_name: "" };
 
@@ -14,7 +14,7 @@ export default function CreateTicket() {
   const [files, setFiles]       = useState([]);
   const [submitting, setSubmit] = useState(false);
 
-  const { data: departments = [] } = useAsync(
+  const { data: departments = [], loading: deptsLoading, error: deptsError } = useAsync(
     () => api.get("/departments").then((r) => {
       const depts = r.data;
       if (depts[0]) setForm((f) => ({ ...f, department: depts[0].name }));
@@ -61,6 +61,34 @@ export default function CreateTicket() {
 
   const handleDeptChange = (e) =>
     setForm((f) => ({ ...f, department: e.target.value, assignee_name: "" }));
+
+  if (deptsLoading) {
+    return (
+      <div className="p-6 md:p-8 flex items-center gap-2 mono-label">
+        <CircleNotch className="animate-spin" size={14} /> Loading…
+      </div>
+    );
+  }
+
+  if (deptsError) {
+    return (
+      <div className="p-6 md:p-8 max-w-3xl">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 mono-label mb-4 hover:underline">
+          <ArrowLeft size={12} /> Back
+        </button>
+        <div className="card-flat p-6 flex items-center gap-3" style={{ color: "var(--status-urgent)" }}>
+          <WarningCircle size={20} />
+          <div>
+            <div className="font-medium">Failed to load departments</div>
+            <div className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
+              Please check your connection and{" "}
+              <button className="underline" onClick={() => window.location.reload()}>try again</button>.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 max-w-3xl" data-testid="create-ticket-page">

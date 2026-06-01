@@ -63,3 +63,14 @@ TICKET_PRIORITIES = ["Low", "Medium", "High", "Urgent"]
 SESSION_TTL_DAYS = 7
 PREVIEW_SESSION_HOURS = 2
 MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
+
+# ── WhatsApp Cloud API (Meta) ─────────────────────────────────────────────────
+WHATSAPP_API_TOKEN = _get("WHATSAPP_API_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = _get("WHATSAPP_PHONE_NUMBER_ID")
+
+ASSIGNEE_PHONES: dict[str, str] = {
+    "Bhaskar": "918121292872",
+    # Add others when ready:
+    # "Bhuvana":     "91XXXXXXXXXX",
+    # "Jayalakshmi": "91XXXXXXXXXX",
+}

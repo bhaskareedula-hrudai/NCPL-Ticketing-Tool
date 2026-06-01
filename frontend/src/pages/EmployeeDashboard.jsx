@@ -28,10 +28,14 @@ export default function EmployeeDashboard() {
   }
 
   const kpis = [
-    { label: "My Tickets", value: stats.total,    hint: "All time" },
-    { label: "Active",     value: stats.active,   hint: "Open · In Progress · Pending" },
-    { label: "Resolved",   value: stats.resolved, hint: "Awaiting closure" },
-    { label: "Closed",     value: stats.closed,   hint: "Done" },
+    { label: "My Tickets", value: stats?.total    ?? 0, hint: "All time" },
+{ label: "Active",     value: stats?.active   ?? 0, hint: "Open · In Progress · Pending" },
+{ label: "Resolved",   value: stats?.resolved ?? 0, hint: "Awaiting closure" },
+{ label: "Closed",     value: stats?.closed   ?? 0, hint: "Done" },
+
+count={stats?.assigned_to_me ?? 0}
+count={stats?.active   ?? 0}
+count={stats?.resolved ?? 0}
   ];
 
   return (

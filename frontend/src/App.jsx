@@ -1,3 +1,4 @@
+import ErrorBoundary from "@/components/common/ErrorBoundary";
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -79,7 +80,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Toaster position="top-right" toastOptions={TOAST_STYLE} />
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   );

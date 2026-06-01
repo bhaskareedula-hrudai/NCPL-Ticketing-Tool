@@ -1,3 +1,4 @@
+from ..whatsapp import send_ticket_notification
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile, File
 from fastapi.responses import Response as HttpResponse
@@ -63,7 +64,18 @@ def create_ticket(body: TicketCreate, request: Request):
     conn.commit()
     conn.close()
     return ticket_with_counts(ticket)
+    conn.commit()
+    conn.close()
 
+    if assignee_name:
+        send_ticket_notification(
+            assignee_name=assignee_name,
+            ticket_code=ticket["code"],
+            ticket_title=ticket["title"],
+            created_by=ticket["created_by_name"],
+        )
+
+    return ticket_with_counts(ticket)
 
 @router.get("/tickets")
 def list_tickets(

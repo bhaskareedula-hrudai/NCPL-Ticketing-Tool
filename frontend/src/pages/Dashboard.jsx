@@ -37,12 +37,12 @@ export default function Dashboard() {
   }
 
   const kpis = [
-    { label: "Total Tickets",  value: stats.total,        hint: "All time" },
-    { label: "Active",         value: stats.active,       hint: "Open · In Progress · Pending" },
-    { label: "Unassigned",     value: stats.unassigned,   hint: "Need triage" },
-    { label: "High Priority",  value: stats.high_priority,hint: "Open High/Urgent" },
-    { label: "Resolved",       value: stats.resolved,     hint: "Awaiting closure" },
-    { label: "Escalated",      value: stats.escalated,    hint: "Flagged" },
+    { label: "Total Tickets",  value: stats?.total         ?? 0, hint: "All time" },
+    { label: "Active",         value: stats?.active        ?? 0, hint: "Open · In Progress · Pending" },
+    { label: "Unassigned",     value: stats?.unassigned    ?? 0, hint: "Need triage" },
+    { label: "High Priority",  value: stats?.high_priority ?? 0, hint: "Open High/Urgent" },
+    { label: "Resolved",       value: stats?.resolved      ?? 0, hint: "Awaiting closure" },
+    { label: "Escalated",      value: stats?.escalated     ?? 0, hint: "Flagged" },
   ];
 
   return (
@@ -80,7 +80,7 @@ export default function Dashboard() {
           <h3 className="text-lg font-medium mb-4" style={{ fontFamily: "Cabinet Grotesk" }}>Tickets Created</h3>
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats.trend_7d}>
+              <AreaChart data={stats?.trend_7d || []}>
                 <defs>
                   <linearGradient id="grad7d" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%"   stopColor="#3A4B59" stopOpacity={0.35} />
@@ -102,13 +102,13 @@ export default function Dashboard() {
           <h3 className="text-lg font-medium mb-4" style={{ fontFamily: "Cabinet Grotesk" }}>By Status</h3>
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.by_status} layout="vertical" margin={{ left: 8 }}>
+              <BarChart data={stats?.by_status || []} layout="vertical" margin={{ left: 8 }}>
                 <CartesianGrid strokeDasharray="2 4" stroke="#E5E2DC" horizontal={false} />
                 <XAxis type="number" tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
                 <YAxis dataKey="status" type="category" tick={LABEL_TICK} axisLine={false} tickLine={false} width={80} />
                 <Tooltip cursor={{ fill: "#FAF9F6" }} contentStyle={TOOLTIP_STYLE} />
                 <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                  {stats.by_status.map((e) => <Cell key={e.status} fill={STATUS_CHART_COLORS[e.status] || "#3A4B59"} />)}
+                  {(stats?.by_status || []).map((e) => <Cell key={e.status} fill={STATUS_CHART_COLORS[e.status] || "#3A4B59"} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
