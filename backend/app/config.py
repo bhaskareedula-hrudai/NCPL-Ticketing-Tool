@@ -70,7 +70,4 @@ WHATSAPP_PHONE_NUMBER_ID = _get("WHATSAPP_PHONE_NUMBER_ID")
 
 ASSIGNEE_PHONES: dict[str, str] = {
     "Bhaskar": "918121292872",
-    # Add others when ready:
-    # "Bhuvana":     "91XXXXXXXXXX",
-    # "Jayalakshmi": "91XXXXXXXXXX",
 }
