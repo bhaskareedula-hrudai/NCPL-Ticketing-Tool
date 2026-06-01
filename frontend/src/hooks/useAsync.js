@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
  * Returns { data, loading, error, refetch }
  */
 export function useAsync(asyncFn, deps = []) {
-  const [state, setState] = useState({ data: null, loading: true, error: null });
+  const [state, setState] = useState({ data: undefined, loading: true, error: null });
   const mountedRef = useRef(true);
 
   const run = useCallback(async () => {
@@ -16,7 +16,7 @@ export function useAsync(asyncFn, deps = []) {
       const data = await asyncFn();
       if (mountedRef.current) setState({ data, loading: false, error: null });
     } catch (err) {
-      if (mountedRef.current) setState({ data: null, loading: false, error: err });
+      if (mountedRef.current) setState({ data: undefined, loading: false, error: err });
     }
   }, deps); // deps is intentionally spread — callers control re-run triggers
 
