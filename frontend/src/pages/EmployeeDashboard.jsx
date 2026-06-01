@@ -29,13 +29,9 @@ export default function EmployeeDashboard() {
 
   const kpis = [
     { label: "My Tickets", value: stats?.total    ?? 0, hint: "All time" },
-{ label: "Active",     value: stats?.active   ?? 0, hint: "Open · In Progress · Pending" },
-{ label: "Resolved",   value: stats?.resolved ?? 0, hint: "Awaiting closure" },
-{ label: "Closed",     value: stats?.closed   ?? 0, hint: "Done" },
-
-count={stats?.assigned_to_me ?? 0}
-count={stats?.active   ?? 0}
-count={stats?.resolved ?? 0}
+    { label: "Active",     value: stats?.active   ?? 0, hint: "Open · In Progress · Pending" },
+    { label: "Resolved",   value: stats?.resolved ?? 0, hint: "Awaiting closure" },
+    { label: "Closed",     value: stats?.closed   ?? 0, hint: "Done" },
   ];
 
   return (
@@ -74,9 +70,9 @@ count={stats?.resolved ?? 0}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <QuickLink to="/my-tickets?scope=assigned_to_me" title="Work on Assigned"  hint="Tickets you need to handle"  count={stats.assigned_to_me || 0} accent testid="qc-assigned" />
-        <QuickLink to="/my-tickets?scope=active"         title="Track Active"      hint="See what's in motion"        count={stats.active}             testid="qc-active" />
-        <QuickLink to="/my-tickets?scope=resolved"       title="Confirm Resolved"  hint="Awaiting your closure"       count={stats.resolved}           testid="qc-resolved" />
+        <QuickLink to="/my-tickets?scope=assigned_to_me" title="Work on Assigned"  hint="Tickets you need to handle"  count={stats?.assigned_to_me ?? 0} accent testid="qc-assigned" />
+        <QuickLink to="/my-tickets?scope=active"         title="Track Active"      hint="See what's in motion"        count={stats?.active   ?? 0}        testid="qc-active" />
+        <QuickLink to="/my-tickets?scope=resolved"       title="Confirm Resolved"  hint="Awaiting your closure"       count={stats?.resolved ?? 0}        testid="qc-resolved" />
       </div>
 
       <div className="card-flat overflow-hidden">
