@@ -3,9 +3,6 @@ import sys
 import logging
 from pathlib import Path
 
-# Ensure `backend/` is importable as root so `from app import ...` works
-# whether this module is run as `backend.main` (from project root) or
-# `main` (from inside the backend/ directory).
 _BACKEND_DIR = Path(__file__).parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
@@ -16,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from app import config  # noqa: E402
 from app.db import init_db, connect as db_connect  # noqa: E402
 from app.routers import auth, tickets, departments, employees, dashboard  # noqa: E402
+from app.routers import settings as settings_router  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("ncpl")
@@ -47,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(departments.router, prefix=prefix)
     app.include_router(employees.router, prefix=prefix)
     app.include_router(dashboard.router, prefix=prefix)
+    app.include_router(settings_router.router, prefix=prefix)
 
     @app.get("/api")
     def health():
@@ -79,6 +78,15 @@ def create_app() -> FastAPI:
         logger.info("NCPL Ticketing API ready — DB initialised")
     except Exception as exc:
         logger.error("init_db() failed — DB may be unavailable: %s", exc)
+
+    # Start WhatsApp Web background worker
+    try:
+        from app import wa_web
+        wa_web.start()
+        logger.info("WhatsApp Web worker started")
+    except Exception as exc:
+        logger.warning("WhatsApp Web worker could not start: %s", exc)
+
     return app
 
 
