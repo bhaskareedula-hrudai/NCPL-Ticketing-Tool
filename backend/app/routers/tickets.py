@@ -1,4 +1,4 @@
-from ..whatsapp import send_ticket_notification
+from .. import whatsapp
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile, File
 from fastapi.responses import Response as HttpResponse
