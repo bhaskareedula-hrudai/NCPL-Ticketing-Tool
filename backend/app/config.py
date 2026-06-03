@@ -62,17 +62,23 @@ SESSION_TTL_DAYS = 7
 PREVIEW_SESSION_HOURS = 2
 MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
 
-# ── WhatsApp (CallMeBot — free, no account required) ─────────────────────────
-# Format: Name:+CountryCodeNumber:ApiKey  (comma-separated)
-# Example: Jayalakshmi:+919876543210:123456,Bhuvana:+919876543211:789012
+# ── WhatsApp (Green API — free, no recipient activation needed) ───────────────
+# Setup (one-time, admin only):
+#   1. Sign up at green-api.com (free tier: 200 messages/month)
+#   2. Create an instance, scan QR code with your WhatsApp
+#   3. Copy Instance ID and API Token below
+#
+# WHATSAPP_PHONE_MAP maps assignee names to their phone numbers only.
+# Format: Name:+CountryCodeNumber  (comma-separated)
+# Example: Jayalakshmi:+919876543210,Bhuvana:+919876543211
+GREEN_API_INSTANCE_ID = _get("GREEN_API_INSTANCE_ID", "")
+GREEN_API_TOKEN = _get("GREEN_API_TOKEN", "")
+
 _phone_map_raw = _get("WHATSAPP_PHONE_MAP", "")
-WHATSAPP_PHONE_MAP: dict[str, tuple[str, str]] = {}
+WHATSAPP_PHONE_MAP: dict[str, str] = {}
 for _entry in _phone_map_raw.split(","):
     _entry = _entry.strip()
-    _parts = _entry.split(":")
-    if len(_parts) >= 3:
-        _name = _parts[0].strip()
-        _rest = ":".join(_parts[1:])
-        _rsplit = _rest.rsplit(":", 1)
-        if len(_rsplit) == 2:
-            WHATSAPP_PHONE_MAP[_name] = (_rsplit[0].strip(), _rsplit[1].strip())
+    if ":" in _entry:
+        _name, _phone = _entry.split(":", 1)
+        if _name.strip() and _phone.strip():
+            WHATSAPP_PHONE_MAP[_name.strip()] = _phone.strip()

@@ -7,23 +7,19 @@ import { initials, timeAgo } from "@/lib/utils";
 
 const ROLES = ["admin", "employee"];
 
-function WhatsAppCell({ phone, waKey, onSave }) {
+function WhatsAppCell({ phone, onSave }) {
   const [editing, setEditing] = useState(false);
   const [phoneVal, setPhoneVal] = useState(phone || "");
-  const [keyVal, setKeyVal] = useState(waKey || "");
 
   const handleSave = () => {
-    onSave(phoneVal.trim() || null, keyVal.trim() || null);
+    onSave(phoneVal.trim() || null);
     setEditing(false);
   };
 
   const handleCancel = () => {
     setPhoneVal(phone || "");
-    setKeyVal(waKey || "");
     setEditing(false);
   };
-
-  const isSet = phone && waKey;
 
   if (editing) {
     return (
@@ -33,16 +29,8 @@ function WhatsAppCell({ phone, waKey, onSave }) {
           autoFocus
           value={phoneVal}
           onChange={(e) => setPhoneVal(e.target.value)}
-          placeholder="+919876543210"
-          className="border rounded px-2 py-1 text-xs"
-          style={{ borderColor: "var(--border-subtle)", background: "var(--bg-app)", color: "var(--text-primary)", width: 160 }}
-        />
-        <input
-          type="text"
-          value={keyVal}
-          onChange={(e) => setKeyVal(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") handleCancel(); }}
-          placeholder="CallMeBot API key"
+          placeholder="+919876543210"
           className="border rounded px-2 py-1 text-xs"
           style={{ borderColor: "var(--border-subtle)", background: "var(--bg-app)", color: "var(--text-primary)", width: 160 }}
         />
@@ -58,11 +46,11 @@ function WhatsAppCell({ phone, waKey, onSave }) {
     <button
       onClick={() => setEditing(true)}
       className="flex items-center gap-1.5 text-xs rounded px-1.5 py-1 transition-colors"
-      style={{ color: isSet ? "var(--text-secondary)" : "var(--text-tertiary)" }}
-      title={isSet ? `${phone} — click to edit` : "Click to set WhatsApp number & CallMeBot key"}
+      style={{ color: phone ? "var(--text-secondary)" : "var(--text-tertiary)" }}
+      title={phone ? `${phone} — click to edit` : "Click to set WhatsApp number"}
     >
       <Phone size={13} />
-      {isSet ? phone : <span style={{ opacity: 0.5 }}>Add number</span>}
+      {phone ? phone : <span style={{ opacity: 0.5 }}>Add number</span>}
     </button>
   );
 }
@@ -83,7 +71,6 @@ export default function Employees() {
   const [addRole, setAddRole]     = useState("employee");
   const [addDept, setAddDept]     = useState("");
   const [addPhone, setAddPhone]   = useState("");
-  const [addWaKey, setAddWaKey]   = useState("");
   const [adding, setAdding]       = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
@@ -107,7 +94,6 @@ export default function Employees() {
         role: addRole,
         department: addDept || undefined,
         phone_number: addPhone.trim() || undefined,
-        wa_api_key: addWaKey.trim() || undefined,
       });
       toast.success(`${addEmail} added successfully`);
       setAddEmail("");
@@ -115,7 +101,6 @@ export default function Employees() {
       setAddRole("employee");
       setAddDept("");
       setAddPhone("");
-      setAddWaKey("");
       setShowAdd(false);
       refetch();
     } catch (e) {
@@ -224,19 +209,8 @@ export default function Employees() {
                 className="w-full border rounded-md px-3 py-2 text-sm"
                 style={{ borderColor: "var(--border-subtle)", background: "var(--bg-app)", color: "var(--text-primary)" }}
               />
-            </div>
-            <div>
-              <label className="text-xs mono-label mb-1 block">CallMeBot API Key (optional)</label>
-              <input
-                type="text"
-                placeholder="e.g. 123456"
-                value={addWaKey}
-                onChange={(e) => setAddWaKey(e.target.value)}
-                className="w-full border rounded-md px-3 py-2 text-sm"
-                style={{ borderColor: "var(--border-subtle)", background: "var(--bg-app)", color: "var(--text-primary)" }}
-              />
               <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
-                Employee sends "I allow callmebot to send me messages" to +34 644 55 99 40 on WhatsApp to get their key.
+                Used to send ticket notifications via WhatsApp. No activation needed from the employee.
               </p>
             </div>
           </div>
@@ -299,8 +273,7 @@ export default function Employees() {
                   <td className="py-3 px-4">
                     <WhatsAppCell
                       phone={u.phone_number}
-                      waKey={u.wa_api_key}
-                      onSave={(phone, key) => update(u.user_id, { phone_number: phone, wa_api_key: key })}
+                      onSave={(phone) => update(u.user_id, { phone_number: phone })}
                     />
                   </td>
                   <td className="py-3 px-4">
