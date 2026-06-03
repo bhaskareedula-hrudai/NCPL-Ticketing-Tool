@@ -7,7 +7,7 @@ from ..auth import require_auth, require_admin, extract_token, get_user_by_token
 from ..db import connect, one, many, new_id, now, next_ticket_code, ticket_with_counts
 from .. import config
 from ..models import AssignIn, CommentIn, StatusIn, TicketCreate, TicketUpdate
-
+from .. import whatsapp 
 router = APIRouter(tags=["tickets"])
 
 
@@ -64,6 +64,10 @@ def create_ticket(body: TicketCreate, request: Request):
     conn.commit()
     conn.close()
     return ticket_with_counts(ticket)
+    if assignee_name:                             
+        whatsapp.send_ticket_assigned(result)
+    return result
+
     conn.commit()
     conn.close()
 

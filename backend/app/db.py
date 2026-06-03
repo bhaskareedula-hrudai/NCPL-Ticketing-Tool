@@ -232,7 +232,9 @@ _PG_SCHEMA = """
         role          TEXT NOT NULL DEFAULT 'employee',
         department    TEXT,
         created_at    TIMESTAMPTZ,
-        last_login_at TIMESTAMPTZ
+        last_login_at TIMESTAMPTZ,
+        phone_number  TEXT,
+        wa_api_key    TEXT
     );
     CREATE TABLE IF NOT EXISTS public.user_sessions (
         session_token TEXT PRIMARY KEY,
@@ -304,7 +306,9 @@ _SQLITE_SCHEMA = """
         role          TEXT NOT NULL DEFAULT 'employee',
         department    TEXT,
         created_at    TEXT,
-        last_login_at TEXT
+        last_login_at TEXT,
+        phone_number  TEXT,
+        wa_api_key    TEXT
     );
     CREATE TABLE IF NOT EXISTS user_sessions (
         session_token TEXT PRIMARY KEY,
@@ -381,6 +385,9 @@ def init_db() -> None:
                 " VALUES (%s, %s, %s, %s) ON CONFLICT (name) DO NOTHING",
                 (new_id("dept"), name, f"{name} department", now()),
             )
+        # migrations: add new columns if they don't exist yet
+        conn.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone_number TEXT")
+        conn.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS wa_api_key TEXT")
     else:
         conn.executescript(_SQLITE_SCHEMA)
         conn.execute("INSERT OR IGNORE INTO ticket_counter (id, value) VALUES (1, 0)")
@@ -390,5 +397,11 @@ def init_db() -> None:
                 " VALUES (?, ?, ?, ?)",
                 (new_id("dept"), name, f"{name} department", now()),
             )
+        # migrations: add new columns for existing SQLite databases
+        for _col in ("phone_number TEXT", "wa_api_key TEXT"):
+            try:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {_col}")
+            except Exception:
+                pass  # column already exists
     conn.commit()
     conn.close()

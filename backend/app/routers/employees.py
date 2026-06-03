@@ -31,6 +31,7 @@ def get_department_members(dept_name: str, request: Request):
     require_auth(request)
     return config.DEPARTMENT_MEMBERS.get(dept_name, [])
 
+
 @router.post("/employees")
 def add_employee(body: EmployeeCreate, request: Request):
     require_admin(request)
@@ -45,9 +46,12 @@ def add_employee(body: EmployeeCreate, request: Request):
     role = "admin" if email in config.ADMIN_EMAILS else body.role
     ts = now()
     name = body.name.strip() if body.name and body.name.strip() else email.split("@")[0]
+    phone = body.phone_number.strip() if body.phone_number and body.phone_number.strip() else None
+    wa_key = body.wa_api_key.strip() if body.wa_api_key and body.wa_api_key.strip() else None
     conn.execute(
-        "INSERT INTO users VALUES (?,?,?,?,?,?,?,?)",
-        (uid, email, name, None, role, body.department, ts, ts),
+        "INSERT INTO users (user_id,email,name,picture,role,department,created_at,last_login_at,phone_number,wa_api_key)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (uid, email, name, None, role, body.department, ts, ts, phone, wa_key),
     )
     conn.commit()
     user = one(conn, "SELECT * FROM users WHERE user_id=?", (uid,))
@@ -69,6 +73,8 @@ def delete_employee(user_id: str, request: Request):
     conn.commit()
     conn.close()
     return {"ok": True}
+
+
 @router.patch("/employees/{user_id}")
 def update_employee(user_id: str, body: EmployeePatch, request: Request):
     require_admin(request)

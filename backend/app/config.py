@@ -23,8 +23,6 @@ APP_NAME = _get("APP_NAME", "ncpl-ticketing")
 GOOGLE_CLIENT_ID = _get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = _get("GOOGLE_CLIENT_SECRET")
 
-# VERCEL_PROJECT_PRODUCTION_URL is the stable production URL (unchanged across deploys).
-# VERCEL_URL is deployment-specific (changes every deploy) — use only as last resort.
 _vercel_url = (
     os.environ.get("VERCEL_PROJECT_PRODUCTION_URL", "")
     or os.environ.get("VERCEL_URL", "")
@@ -64,10 +62,17 @@ SESSION_TTL_DAYS = 7
 PREVIEW_SESSION_HOURS = 2
 MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
 
-# ── WhatsApp Cloud API (Meta) ─────────────────────────────────────────────────
-WHATSAPP_API_TOKEN = _get("WHATSAPP_API_TOKEN")
-WHATSAPP_PHONE_NUMBER_ID = _get("WHATSAPP_PHONE_NUMBER_ID")
-
-ASSIGNEE_PHONES: dict[str, str] = {
-    "Bhaskar": "918121292872",
-}
+# ── WhatsApp (CallMeBot — free, no account required) ─────────────────────────
+# Format: Name:+CountryCodeNumber:ApiKey  (comma-separated)
+# Example: Jayalakshmi:+919876543210:123456,Bhuvana:+919876543211:789012
+_phone_map_raw = _get("WHATSAPP_PHONE_MAP", "")
+WHATSAPP_PHONE_MAP: dict[str, tuple[str, str]] = {}
+for _entry in _phone_map_raw.split(","):
+    _entry = _entry.strip()
+    _parts = _entry.split(":")
+    if len(_parts) >= 3:
+        _name = _parts[0].strip()
+        _rest = ":".join(_parts[1:])
+        _rsplit = _rest.rsplit(":", 1)
+        if len(_rsplit) == 2:
+            WHATSAPP_PHONE_MAP[_name] = (_rsplit[0].strip(), _rsplit[1].strip())

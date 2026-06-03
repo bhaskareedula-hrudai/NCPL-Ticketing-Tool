@@ -1,56 +1,69 @@
 import logging
-import requests
+from typing import Optional
+
+import requests as http
+
 from . import config
 
 logger = logging.getLogger(__name__)
 
 
-def send_ticket_notification(
-    assignee_name: str,
-    ticket_code: str,
-    ticket_title: str,
-    created_by: str,
-) -> bool:
-    if not config.WHATSAPP_API_TOKEN or not config.WHATSAPP_PHONE_NUMBER_ID:
-        logger.debug("WhatsApp not configured — skipping notification")
+def _get_phone_and_key(
+    assignee_name: Optional[str], assignee_id: Optional[str]
+) -> tuple[Optional[str], Optional[str]]:
+    from .db import connect, one
+
+    if assignee_id:
+        conn = connect()
+        user = one(conn, "SELECT phone_number, wa_api_key FROM users WHERE user_id=?", (assignee_id,))
+        conn.close()
+        if user and user.get("phone_number"):
+            return user["phone_number"], user.get("wa_api_key")
+
+    if assignee_name and assignee_name in config.WHATSAPP_PHONE_MAP:
+        phone, key = config.WHATSAPP_PHONE_MAP[assignee_name]
+        return phone, key
+
+    return None, None
+
+
+def send_ticket_assigned(ticket: dict) -> bool:
+    phone, api_key = _get_phone_and_key(
+        ticket.get("assignee_name"), ticket.get("assignee_id")
+    )
+    if not phone or not api_key:
+        logger.debug(
+            "WhatsApp skipped for ticket %s — no phone/apikey for assignee %s",
+            ticket.get("code"),
+            ticket.get("assignee_name"),
+        )
         return False
 
-    phone = config.ASSIGNEE_PHONES.get(assignee_name)
-    if not phone:
-        logger.debug("No phone number mapped for assignee '%s' — skipping", assignee_name)
-        return False
-
-    ticket_link = f"{config.FRONTEND_URL}/tickets"
+    assignee = ticket.get("assignee_name") or "there"
+    ticket_url = f"{config.FRONTEND_URL}/tickets/{ticket['id']}"
 
     message = (
-        f"Hello {assignee_name},\n\n"
-        f"A ticket has been raised for you:\n"
-        f"*Ticket:* {ticket_code}\n"
-        f"*Title:* {ticket_title}\n"
-        f"*Raised by:* {created_by}\n\n"
-        f"Please visit the portal to take action:\n{ticket_link}\n\n"
+        f"Hello {assignee}!\n\n"
+        f"A new support ticket has been raised for you on NCPL Ticketing.\n\n"
+        f"Ticket : {ticket.get('code', '')}\n"
+        f"Title  : {ticket.get('title', '')}\n"
+        f"Priority: {ticket.get('priority', '')}\n"
+        f"Raised by: {ticket.get('created_by_name', '')}\n"
+        f"Dept   : {ticket.get('department', '')}\n\n"
+        f"Please visit the link below to view and respond:\n"
+        f"{ticket_url}\n\n"
         f"— NCPL Ticketing System"
     )
 
-    url = f"https://graph.facebook.com/v19.0/{config.WHATSAPP_PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {config.WHATSAPP_API_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": phone,
-        "type": "text",
-        "text": {"body": message},
-    }
-
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=10)
-        if resp.ok:
-            logger.info("WhatsApp notification sent to %s for ticket %s", assignee_name, ticket_code)
-            return True
-        logger.error("WhatsApp API %s: %s", resp.status_code, resp.text)
-        return False
+        resp = http.get(
+            "https://api.callmebot.com/whatsapp.php",
+            params={"phone": phone, "text": message, "apikey": api_key},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        logger.info("WhatsApp notification sent to %s for ticket %s", phone, ticket.get("code"))
+        return True
     except Exception as exc:
-        logger.error("WhatsApp send failed: %s", exc)
+        logger.error("WhatsApp notification failed for ticket %s: %s", ticket.get("code"), exc)
         return False
