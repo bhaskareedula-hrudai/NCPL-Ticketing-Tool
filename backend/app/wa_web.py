@@ -1,3 +1,17 @@
+"""
+WhatsApp Web automation using Playwright (no external service needed).
+
+Setup (one-time):
+    pip install playwright
+    python -m playwright install chromium
+
+How it works:
+  - On first run, opens a headless browser to WhatsApp Web
+  - Settings page shows the QR code — scan it once with your WhatsApp
+  - Session is saved locally in wa_session/ so future restarts skip QR
+  - Messages are sent by navigating to whatsapp.com/send?phone=...
+"""
+import asyncio
 import logging
 import queue
 import threading
@@ -14,9 +28,9 @@ _started = False
 _lock = threading.Lock()
 
 
-def _worker():
+async def _async_worker():
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.async_api import async_playwright
     except ImportError:
         _status["state"] = "error"
         _status["error"] = (
@@ -30,23 +44,23 @@ def _worker():
     _status["state"] = "connecting"
 
     try:
-        with sync_playwright() as pw:
-            ctx = pw.chromium.launch_persistent_context(
+        async with async_playwright() as pw:
+            ctx = await pw.chromium.launch_persistent_context(
                 str(_SESSION_DIR),
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
             )
-            page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            page.set_viewport_size({"width": 1280, "height": 800})
+            page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+            await page.set_viewport_size({"width": 1280, "height": 800})
 
             if "web.whatsapp.com" not in page.url:
-                page.goto("https://web.whatsapp.com", wait_until="domcontentloaded")
-                time.sleep(3)
+                await page.goto("https://web.whatsapp.com", wait_until="domcontentloaded")
+                await asyncio.sleep(3)
 
             # Wait until logged in, updating QR code while waiting
             while True:
                 try:
-                    page.wait_for_selector(
+                    await page.wait_for_selector(
                         '[data-testid="chat-list"], #side', timeout=3000
                     )
                     _status["state"] = "connected"
@@ -57,7 +71,7 @@ def _worker():
                     pass
 
                 try:
-                    qr_data = page.evaluate("""() => {
+                    qr_data = await page.evaluate("""() => {
                         const canvas = document.querySelector('canvas');
                         return canvas ? canvas.toDataURL('image/png') : null;
                     }""")
@@ -67,13 +81,14 @@ def _worker():
                 except Exception:
                     pass
 
-                time.sleep(2)
+                await asyncio.sleep(2)
 
             # Message loop
             while True:
                 try:
-                    phone, message = _msg_queue.get(timeout=5)
+                    phone, message = _msg_queue.get_nowait()
                 except queue.Empty:
+                    await asyncio.sleep(1)
                     continue
 
                 try:
@@ -83,23 +98,32 @@ def _worker():
                         f"?phone={phone_clean}"
                         f"&text={urllib.parse.quote(message)}"
                     )
-                    page.goto(url, wait_until="domcontentloaded")
-                    send_btn = page.wait_for_selector(
+                    await page.goto(url, wait_until="domcontentloaded")
+                    send_btn = await page.wait_for_selector(
                         '[data-testid="send"], [aria-label="Send"]',
                         timeout=25000,
                     )
                     if send_btn:
-                        send_btn.click()
-                        time.sleep(3)
+                        await send_btn.click()
+                        await asyncio.sleep(3)
                         logger.info("WhatsApp sent to +%s", phone_clean)
-                    page.goto("https://web.whatsapp.com", wait_until="domcontentloaded")
+                    await page.goto("https://web.whatsapp.com", wait_until="domcontentloaded")
                 except Exception as exc:
                     logger.error("WhatsApp send failed to %s: %s", phone, exc)
 
     except Exception as exc:
         _status["state"] = "error"
         _status["error"] = str(exc)
-        logger.error("WhatsApp Web worker crashed: %s", exc)
+        logger.error("WhatsApp Web worker crashed: %s", exc, exc_info=True)
+
+
+def _thread_main():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_async_worker())
+    finally:
+        loop.close()
 
 
 def start():
@@ -107,7 +131,7 @@ def start():
     with _lock:
         if not _started:
             _started = True
-            t = threading.Thread(target=_worker, daemon=True, name="wa-web")
+            t = threading.Thread(target=_thread_main, daemon=True, name="wa-web")
             t.start()
 
 
