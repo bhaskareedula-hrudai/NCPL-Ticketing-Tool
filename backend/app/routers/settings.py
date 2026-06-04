@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from ..auth import require_admin
-from ..db import connect, one
+from ..db import _sb, get_one, db_insert, db_delete
 
 router = APIRouter(tags=["settings"])
 
@@ -14,26 +14,24 @@ class WhatsAppSettings(BaseModel):
     phone_map: Optional[str] = None
 
 
-def _get_setting(conn, key: str):
-    row = one(conn, "SELECT value FROM app_settings WHERE key=?", (key,))
+def _get_setting(key: str) -> Optional[str]:
+    row = get_one("app_settings", key=key)
     return row["value"] if row else None
 
 
-def _set_setting(conn, key: str, value: str):
-    conn.execute("DELETE FROM app_settings WHERE key=?", (key,))
-    conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?)", (key, value))
+def _set_setting(key: str, value: str):
+    db_delete("app_settings", key=key)
+    db_insert("app_settings", {"key": key, "value": value})
 
 
 @router.get("/settings/whatsapp")
 def get_whatsapp_settings(request: Request):
     require_admin(request)
-    conn = connect()
     result = {
-        "instance_id": _get_setting(conn, "wa_instance_id") or "",
-        "token": _get_setting(conn, "wa_token") or "",
-        "phone_map": _get_setting(conn, "wa_phone_map") or "",
+        "instance_id": _get_setting("wa_instance_id") or "",
+        "token": _get_setting("wa_token") or "",
+        "phone_map": _get_setting("wa_phone_map") or "",
     }
-    conn.close()
     token = result["token"]
     result["token_masked"] = (token[:6] + "…" + token[-4:]) if len(token) > 10 else ("*" * len(token) if token else "")
     return result
@@ -42,15 +40,12 @@ def get_whatsapp_settings(request: Request):
 @router.patch("/settings/whatsapp")
 def save_whatsapp_settings(body: WhatsAppSettings, request: Request):
     require_admin(request)
-    conn = connect()
     if body.instance_id is not None:
-        _set_setting(conn, "wa_instance_id", body.instance_id.strip())
+        _set_setting("wa_instance_id", body.instance_id.strip())
     if body.token is not None:
-        _set_setting(conn, "wa_token", body.token.strip())
+        _set_setting("wa_token", body.token.strip())
     if body.phone_map is not None:
-        _set_setting(conn, "wa_phone_map", body.phone_map.strip())
-    conn.commit()
-    conn.close()
+        _set_setting("wa_phone_map", body.phone_map.strip())
     return {"ok": True}
 
 
@@ -76,7 +71,4 @@ def test_whatsapp(request: Request):
     sent = whatsapp.send_test_message()
     if sent:
         return {"ok": True, "message": "Test message sent successfully"}
-    return {
-        "ok": False,
-        "message": "Failed — scan the QR code in the WhatsApp Web section, or check Green API credentials",
-    }
+    return {"ok": False, "message": "Failed — check Green API credentials or WhatsApp Web QR code"}

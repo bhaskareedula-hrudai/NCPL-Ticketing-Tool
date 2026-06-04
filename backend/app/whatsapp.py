@@ -7,11 +7,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_phone_map() -> dict[str, str]:
-    from .db import connect, one
+    from .db import get_one
     try:
-        conn = connect()
-        row = one(conn, "SELECT value FROM app_settings WHERE key='wa_phone_map'")
-        conn.close()
+        row = get_one("app_settings", key="wa_phone_map")
         raw = (row["value"] if row else "") or config.WHATSAPP_PHONE_MAP_RAW
     except Exception:
         raw = config.WHATSAPP_PHONE_MAP_RAW
@@ -26,11 +24,9 @@ def _get_phone_map() -> dict[str, str]:
 
 
 def _get_phone(assignee_name: Optional[str], assignee_id: Optional[str]) -> Optional[str]:
-    from .db import connect, one
+    from .db import get_one
     if assignee_id:
-        conn = connect()
-        user = one(conn, "SELECT phone_number FROM users WHERE user_id=?", (assignee_id,))
-        conn.close()
+        user = get_one("users", user_id=assignee_id)
         if user and user.get("phone_number"):
             return user["phone_number"]
     if assignee_name:
@@ -45,13 +41,10 @@ def _do_send(phone: str, message: str) -> bool:
     if wa_web.get_status()["state"] == "connected":
         return wa_web.send(phone, message)
 
-    # Fallback: Green API
-    from .db import connect, one
+    from .db import get_one
     try:
-        conn = connect()
-        inst = one(conn, "SELECT value FROM app_settings WHERE key='wa_instance_id'")
-        tok = one(conn, "SELECT value FROM app_settings WHERE key='wa_token'")
-        conn.close()
+        inst = get_one("app_settings", key="wa_instance_id")
+        tok = get_one("app_settings", key="wa_token")
         instance_id = (inst["value"] if inst else "") or config.GREEN_API_INSTANCE_ID
         token = (tok["value"] if tok else "") or config.GREEN_API_TOKEN
     except Exception:
@@ -76,10 +69,6 @@ def _do_send(phone: str, message: str) -> bool:
 def send_ticket_assigned(ticket: dict) -> bool:
     phone = _get_phone(ticket.get("assignee_name"), ticket.get("assignee_id"))
     if not phone:
-        logger.debug(
-            "WhatsApp skipped for ticket %s — no phone for assignee %s",
-            ticket.get("code"), ticket.get("assignee_name"),
-        )
         return False
 
     assignee = ticket.get("assignee_name") or "there"
@@ -92,13 +81,12 @@ def send_ticket_assigned(ticket: dict) -> bool:
         f"Priority: {ticket.get('priority', '')}\n"
         f"Raised by: {ticket.get('created_by_name', '')}\n"
         f"Dept   : {ticket.get('department', '')}\n\n"
-        f"Please visit the link below to view and respond:\n"
-        f"{ticket_url}\n\n"
+        f"View it here: {ticket_url}\n\n"
         f"— NCPL Ticketing System"
     )
     result = _do_send(phone, message)
     if result:
-        logger.info("WhatsApp notification sent to %s for ticket %s", phone, ticket.get("code"))
+        logger.info("WhatsApp sent to %s for ticket %s", phone, ticket.get("code"))
     return result
 
 

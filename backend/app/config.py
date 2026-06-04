@@ -4,7 +4,6 @@ from dotenv import dotenv_values
 
 _ROOT = Path(__file__).resolve().parent.parent
 
-# Read .env file directly — utf-8-sig handles Windows BOM, takes priority over system env vars
 _env = dotenv_values(_ROOT / ".env", encoding="utf-8-sig")
 
 def _get(key: str, default: str = "") -> str:
@@ -13,7 +12,8 @@ def _get(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
 
 
-DATABASE_URL = _env.get("DATABASE_URL", os.environ.get("DATABASE_URL", ""))
+SUPABASE_URL = _get("SUPABASE_URL")
+SUPABASE_KEY = _get("SUPABASE_KEY")
 ADMIN_EMAILS = frozenset(
     e.strip().lower()
     for e in _get("ADMIN_EMAILS").split(",")
@@ -62,20 +62,11 @@ SESSION_TTL_DAYS = 7
 PREVIEW_SESSION_HOURS = 2
 MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
 
-# ── WhatsApp (Green API — free, no recipient activation needed) ───────────────
-# Setup (one-time, admin only):
-#   1. Sign up at green-api.com (free tier: 200 messages/month)
-#   2. Create an instance, scan QR code with your WhatsApp
-#   3. Copy Instance ID and API Token below
-#
-# WHATSAPP_PHONE_MAP maps assignee names to their phone numbers only.
-# Format: Name:+CountryCodeNumber  (comma-separated)
-# Example: Jayalakshmi:+919876543210,Bhuvana:+919876543211
 GREEN_API_INSTANCE_ID = _get("GREEN_API_INSTANCE_ID", "")
 GREEN_API_TOKEN = _get("GREEN_API_TOKEN", "")
 
 _phone_map_raw = _get("WHATSAPP_PHONE_MAP", "")
-WHATSAPP_PHONE_MAP_RAW = _phone_map_raw  
+WHATSAPP_PHONE_MAP_RAW = _phone_map_raw
 WHATSAPP_PHONE_MAP: dict[str, str] = {}
 for _entry in _phone_map_raw.split(","):
     _entry = _entry.strip()

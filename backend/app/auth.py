@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import Request, HTTPException, Response
 from . import config
-from .db import connect, one, now
+from .db import _sb, get_one, db_insert, db_update, now
 
 
 def extract_token(request: Request) -> Optional[str]:
@@ -18,20 +18,15 @@ def extract_token(request: Request) -> Optional[str]:
 def get_user_by_token(token: Optional[str]) -> Optional[dict]:
     if not token:
         return None
-    conn = connect()
-    session = one(conn, "SELECT * FROM user_sessions WHERE session_token=?", (token,))
+    session = get_one("user_sessions", session_token=token)
     if not session:
-        conn.close()
         return None
     exp = datetime.fromisoformat(session["expires_at"])
     if exp.tzinfo is None:
         exp = exp.replace(tzinfo=timezone.utc)
     if exp < datetime.now(timezone.utc):
-        conn.close()
         return None
-    user = one(conn, "SELECT * FROM users WHERE user_id=?", (session["user_id"],))
-    conn.close()
-    return user
+    return get_one("users", user_id=session["user_id"])
 
 
 def require_auth(request: Request) -> dict:
@@ -62,31 +57,25 @@ def set_session_cookie(response: Response, token: str, max_age: int = config.SES
 
 def upsert_user(email: str, name: str, picture: Optional[str], response: Response) -> dict:
     import uuid as _uuid
-    conn = connect()
-    existing = one(conn, "SELECT * FROM users WHERE email=?", (email,))
+    existing = get_one("users", email=email)
     token = secrets.token_urlsafe(32)
     ts = now()
 
     if existing:
         uid = existing["user_id"]
         role = "admin" if email in config.ADMIN_EMAILS else existing["role"]
-        conn.execute(
-            "UPDATE users SET name=?, picture=?, role=?, last_login_at=? WHERE user_id=?",
-            (name, picture, role, ts, uid),
-        )
+        db_update("users", {"name": name, "picture": picture, "role": role, "last_login_at": ts}, user_id=uid)
     else:
         uid = f"user_{_uuid.uuid4().hex[:12]}"
         role = "admin" if email in config.ADMIN_EMAILS else "employee"
-        conn.execute(
-    "INSERT INTO users (user_id, email, name, picture, role, department, created_at, last_login_at)"
-    " VALUES (?,?,?,?,?,?,?,?)",
-    (uid, email, name, picture, role, None, ts, ts),
-)
+        db_insert("users", {
+            "user_id": uid, "email": email, "name": name, "picture": picture,
+            "role": role, "department": None, "created_at": ts, "last_login_at": ts,
+            "phone_number": None, "wa_api_key": None,
+        })
 
     expires = (datetime.now(timezone.utc) + timedelta(days=config.SESSION_TTL_DAYS)).isoformat()
-    conn.execute("INSERT INTO user_sessions VALUES (?,?,?,?)", (token, uid, expires, ts))
-    conn.commit()
-    user = one(conn, "SELECT * FROM users WHERE user_id=?", (uid,))
-    conn.close()
+    db_insert("user_sessions", {"session_token": token, "user_id": uid, "expires_at": expires, "created_at": ts})
+    user = get_one("users", user_id=uid)
     set_session_cookie(response, token)
     return user

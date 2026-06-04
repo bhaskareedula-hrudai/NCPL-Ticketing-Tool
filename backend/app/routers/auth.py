@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import RedirectResponse
 
 from ..auth import extract_token, get_user_by_token, require_admin, set_session_cookie, upsert_user
-from ..db import connect, one, now, new_id
+from ..db import get_one, db_insert, db_delete, new_id, now
 from .. import config
 from ..models import DevLoginIn
 
@@ -66,16 +66,12 @@ def google_oauth_callback(
         logging.getLogger("ncpl").error("OAuth failed: %s | Google says: %s", exc, body)
         return RedirectResponse(f"{config.FRONTEND_URL}/login?error=auth_failed")
 
-    # ← email must be here, OUTSIDE the except block
     email = profile.get("email", "").lower()
     if not email:
         return RedirectResponse(f"{config.FRONTEND_URL}/login?error=auth_failed")
 
-    # Block sign-in if email is not pre-approved by admin
     try:
-        conn = connect()
-        existing = one(conn, "SELECT user_id FROM users WHERE email=?", (email,))
-        conn.close()
+        existing = get_one("users", email=email)
         if not existing and email not in config.ADMIN_EMAILS:
             return RedirectResponse(f"{config.FRONTEND_URL}/login?error=not_invited")
     except Exception:
@@ -113,10 +109,7 @@ def get_current_user(request: Request):
 def logout(request: Request, response: Response):
     token = extract_token(request)
     if token:
-        conn = connect()
-        conn.execute("DELETE FROM user_sessions WHERE session_token=?", (token,))
-        conn.commit()
-        conn.close()
+        db_delete("user_sessions", session_token=token)
     response.delete_cookie("session_token", path="/")
     return {"ok": True}
 
@@ -125,22 +118,20 @@ def logout(request: Request, response: Response):
 def preview_as_employee(request: Request, response: Response):
     require_admin(request)
     demo_email = "demo.employee@ncpl.preview"
-    conn = connect()
-    demo = one(conn, "SELECT * FROM users WHERE email=?", (demo_email,))
+    ts = now()
+    demo = get_one("users", email=demo_email)
     if not demo:
         uid = new_id("user")
-        conn.execute(
-    "INSERT INTO users (user_id, email, name, picture, role, department, created_at, last_login_at)"
-    " VALUES (?,?,?,?,?,?,?,?)",
-    (uid, demo_email, "Demo Employee", None, "employee", "HR", now(), now()),
-)
-        conn.commit()
-        demo = one(conn, "SELECT * FROM users WHERE user_id=?", (uid,))
+        db_insert("users", {
+            "user_id": uid, "email": demo_email, "name": "Demo Employee",
+            "picture": None, "role": "employee", "department": "HR",
+            "created_at": ts, "last_login_at": ts,
+            "phone_number": None, "wa_api_key": None,
+        })
+        demo = get_one("users", user_id=uid)
 
     preview_token = f"preview_{secrets.token_urlsafe(24)}"
     expires = (datetime.now(timezone.utc) + timedelta(hours=config.PREVIEW_SESSION_HOURS)).isoformat()
-    conn.execute("INSERT INTO user_sessions VALUES (?,?,?,?)", (preview_token, demo["user_id"], expires, now()))
-    conn.commit()
-    conn.close()
+    db_insert("user_sessions", {"session_token": preview_token, "user_id": demo["user_id"], "expires_at": expires, "created_at": ts})
     set_session_cookie(response, preview_token, max_age=config.PREVIEW_SESSION_HOURS * 3600)
     return {"user": demo, "preview": True}

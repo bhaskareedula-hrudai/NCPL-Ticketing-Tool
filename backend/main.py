@@ -7,13 +7,12 @@ _BACKEND_DIR = Path(__file__).parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app import config  # noqa: E402
-from app.db import init_db, connect as db_connect  # noqa: E402
-from app.routers import auth, tickets, departments, employees, dashboard  # noqa: E402
-from app.routers import settings as settings_router  # noqa: E402
+from app import config
+from app.routers import auth, tickets, departments, employees, dashboard
+from app.routers import settings as settings_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("ncpl")
@@ -53,33 +52,13 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health_check():
-        db_url = config.DATABASE_URL
-        masked = (db_url[:30] + "…" + db_url[-20:]) if len(db_url) > 55 else db_url
         try:
-            conn = db_connect()
-            row = conn.execute("SELECT 1 AS ok").fetchone()
-            conn.close()
-            db_ok = row is not None
+            from app.db import _sb
+            _sb().table("departments").select("id").limit(1).execute()
+            return {"service": "NCPL Ticketing", "db": "ok", "storage": "supabase"}
         except Exception as exc:
-            return {
-                "service": "NCPL Ticketing",
-                "db": "error",
-                "db_url_preview": masked or "(not set)",
-                "error": str(exc),
-            }
-        return {
-            "service": "NCPL Ticketing",
-            "db": "ok",
-            "db_url_preview": masked or "(not set)",
-        }
+            return {"service": "NCPL Ticketing", "db": "error", "error": str(exc)}
 
-    try:
-        init_db()
-        logger.info("NCPL Ticketing API ready — DB initialised")
-    except Exception as exc:
-        logger.error("init_db() failed — DB may be unavailable: %s", exc)
-
-    # Start WhatsApp Web background worker
     try:
         from app import wa_web
         wa_web.start()
