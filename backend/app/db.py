@@ -295,6 +295,10 @@ _PG_SCHEMA = """
         id    INTEGER PRIMARY KEY DEFAULT 1,
         value INTEGER DEFAULT 0
     )
+        CREATE TABLE IF NOT EXISTS public.app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT
+    )
 """
 
 _SQLITE_SCHEMA = """
@@ -369,6 +373,10 @@ _SQLITE_SCHEMA = """
         id    INTEGER PRIMARY KEY,
         value INTEGER DEFAULT 0
     )
+        CREATE TABLE IF NOT EXISTS app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT
+    )
 """
 
 
@@ -403,5 +411,8 @@ def init_db() -> None:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {_col}")
             except Exception:
                 pass  # column already exists
+        conn.execute(
+    "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)"
+)
     conn.commit()
     conn.close()

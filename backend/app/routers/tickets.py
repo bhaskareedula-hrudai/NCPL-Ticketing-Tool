@@ -1,4 +1,4 @@
-from .. import whatsapp
+from .. import config,whatsapp
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile, File
 from fastapi.responses import Response as HttpResponse
@@ -7,7 +7,6 @@ from ..auth import require_auth, require_admin, extract_token, get_user_by_token
 from ..db import connect, one, many, new_id, now, next_ticket_code, ticket_with_counts
 from .. import config
 from ..models import AssignIn, CommentIn, StatusIn, TicketCreate, TicketUpdate
-from .. import whatsapp 
 router = APIRouter(tags=["tickets"])
 
 

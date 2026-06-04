@@ -130,9 +130,10 @@ def preview_as_employee(request: Request, response: Response):
     if not demo:
         uid = new_id("user")
         conn.execute(
-            "INSERT INTO users VALUES (?,?,?,?,?,?,?,?)",
-            (uid, demo_email, "Demo Employee", None, "employee", "HR", now(), now()),
-        )
+    "INSERT INTO users (user_id, email, name, picture, role, department, created_at, last_login_at)"
+    " VALUES (?,?,?,?,?,?,?,?)",
+    (uid, demo_email, "Demo Employee", None, "employee", "HR", now(), now()),
+)
         conn.commit()
         demo = one(conn, "SELECT * FROM users WHERE user_id=?", (uid,))
 

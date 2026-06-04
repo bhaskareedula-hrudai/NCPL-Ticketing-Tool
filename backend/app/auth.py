@@ -78,9 +78,10 @@ def upsert_user(email: str, name: str, picture: Optional[str], response: Respons
         uid = f"user_{_uuid.uuid4().hex[:12]}"
         role = "admin" if email in config.ADMIN_EMAILS else "employee"
         conn.execute(
-            "INSERT INTO users VALUES (?,?,?,?,?,?,?,?)",
-            (uid, email, name, picture, role, None, ts, ts),
-        )
+    "INSERT INTO users (user_id, email, name, picture, role, department, created_at, last_login_at)"
+    " VALUES (?,?,?,?,?,?,?,?)",
+    (uid, email, name, picture, role, None, ts, ts),
+)
 
     expires = (datetime.now(timezone.utc) + timedelta(days=config.SESSION_TTL_DAYS)).isoformat()
     conn.execute("INSERT INTO user_sessions VALUES (?,?,?,?)", (token, uid, expires, ts))

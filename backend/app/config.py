@@ -75,6 +75,7 @@ GREEN_API_INSTANCE_ID = _get("GREEN_API_INSTANCE_ID", "")
 GREEN_API_TOKEN = _get("GREEN_API_TOKEN", "")
 
 _phone_map_raw = _get("WHATSAPP_PHONE_MAP", "")
+WHATSAPP_PHONE_MAP_RAW = _phone_map_raw  
 WHATSAPP_PHONE_MAP: dict[str, str] = {}
 for _entry in _phone_map_raw.split(","):
     _entry = _entry.strip()
