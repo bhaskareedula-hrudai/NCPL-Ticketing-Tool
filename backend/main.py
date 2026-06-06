@@ -1,4 +1,5 @@
 """NCPL Ticketing Tool — FastAPI application entry point."""
+import os
 import sys
 import logging
 from pathlib import Path
@@ -59,12 +60,13 @@ def create_app() -> FastAPI:
         except Exception as exc:
             return {"service": "NCPL Ticketing", "db": "error", "error": str(exc)}
 
-    try:
-        from app import wa_web
-        wa_web.start()
-        logger.info("WhatsApp Web worker started")
-    except Exception as exc:
-        logger.warning("WhatsApp Web worker could not start: %s", exc)
+    if not os.environ.get("VERCEL"):
+        try:
+            from app import wa_web
+            wa_web.start()
+            logger.info("WhatsApp Web worker started")
+        except Exception as exc:
+            logger.warning("WhatsApp Web worker could not start: %s", exc)
 
     return app
 
