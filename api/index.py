@@ -44,4 +44,4 @@ if app is None:
     app = _make_error_app(_startup_error or "app failed to load (unknown reason)")
 
 # Vercel's Python runtime calls handler as a plain ASGI callable.
-handler = app
+
