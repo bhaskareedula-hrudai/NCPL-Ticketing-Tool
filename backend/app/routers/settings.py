@@ -53,7 +53,12 @@ def save_whatsapp_settings(body: WhatsAppSettings, request: Request):
 def whatsapp_status(request: Request):
     require_admin(request)
     from .. import wa_web
-    return wa_web.get_status()
+    from .. import config
+    status = wa_web.get_status()
+    inst = _get_setting("wa_instance_id") or config.GREEN_API_INSTANCE_ID
+    tok = _get_setting("wa_token") or config.GREEN_API_TOKEN
+    status["greenApiReady"] = bool(inst and tok)
+    return status
 
 
 @router.post("/settings/whatsapp/logout")
