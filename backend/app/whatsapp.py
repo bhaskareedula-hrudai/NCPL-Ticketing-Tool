@@ -89,6 +89,90 @@ def send_ticket_assigned(ticket: dict) -> bool:
         logger.info("WhatsApp sent to %s for ticket %s", phone, ticket.get("code"))
     return result
 
+def send_new_ticket_to_admin(ticket: dict) -> bool:
+    phone = config.WIDGET_ADMIN_PHONE
+    if not phone:
+        from .db import _sb as _get_sb
+        try:
+            admins = _get_sb().table("users").select("phone_number").eq("role", "admin").execute().data or []
+            for a in admins:
+                if a.get("phone_number"):
+                    phone = a["phone_number"]
+                    break
+        except Exception:
+            pass
+    if not phone:
+        phone_map = _get_phone_map()
+        if phone_map:
+            phone = next(iter(phone_map.values()))
+    if not phone:
+        logger.warning("No admin phone configured for widget notifications")
+        return False
+
+    ticket_url = f"{config.FRONTEND_URL}/tickets/{ticket['id']}"
+    source = ticket.get("source") or "Widget"
+    message = (
+        f"🎫 New support ticket from {source}\n\n"
+        f"Ticket  : {ticket.get('code', '')}\n"
+        f"Title   : {ticket.get('title', '')}\n"
+        f"Priority: {ticket.get('priority', '')}\n"
+        f"From    : {ticket.get('created_by_email', '')}\n\n"
+        f"View: {ticket_url}\n\n"
+        f"— NCPL Ticketing System"
+    )
+    result = _do_send(phone, message)
+    if result:
+        logger.info("Admin WhatsApp sent to %s for widget ticket %s", phone, ticket.get("code"))
+    return result
+
+
+def send_new_ticket_to_department(ticket: dict) -> bool:
+    dept_name = (ticket.get("department") or "").strip()
+    if not dept_name:
+        return send_new_ticket_to_admin(ticket)
+
+    try:
+        dept_rows = _sb().table("departments").select("id").eq("name", dept_name).execute().data or []
+        if not dept_rows:
+            logger.warning("Department '%s' not found; falling back to admin notify", dept_name)
+            return send_new_ticket_to_admin(ticket)
+
+        dept_id = dept_rows[0]["id"]
+        members = (
+            _sb().table("users")
+            .select("phone_number")
+            .eq("department_id", dept_id)
+            .not_.is_("phone_number", "null")
+            .execute().data or []
+        )
+
+        ticket_url = f"{config.FRONTEND_URL}/tickets/{ticket['id']}"
+        source = ticket.get("source") or "Widget"
+        message = (
+            f"🎫 New support ticket for {dept_name} ({source})\n\n"
+            f"Ticket  : {ticket.get('code', '')}\n"
+            f"Title   : {ticket.get('title', '')}\n"
+            f"Priority: {ticket.get('priority', '')}\n"
+            f"From    : {ticket.get('created_by_email', '')}\n\n"
+            f"View: {ticket_url}\n\n"
+            f"— NCPL Ticketing System"
+        )
+
+        notified = False
+        for m in members:
+            phone = (m.get("phone_number") or "").strip()
+            if phone and _do_send(phone, message):
+                logger.info("WhatsApp sent to dept member %s for ticket %s", phone, ticket.get("code"))
+                notified = True
+
+        if not notified:
+            logger.warning("No dept members notified for '%s'; falling back to admin", dept_name)
+            return send_new_ticket_to_admin(ticket)
+        return True
+
+    except Exception as exc:
+        logger.warning("Department notification failed for %s: %s", ticket.get("code"), exc)
+        return send_new_ticket_to_admin(ticket)
 
 def send_test_message() -> bool:
     phone_map = _get_phone_map()

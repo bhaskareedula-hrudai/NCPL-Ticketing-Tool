@@ -10,13 +10,34 @@ if str(_BACKEND_DIR) not in sys.path:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 from app import config
-from app.routers import auth, tickets, departments, employees, dashboard
+from app.routers import auth, tickets, departments, employees, dashboard, widget
 from app.routers import settings as settings_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("ncpl")
+
+class _WidgetCORSMiddleware(BaseHTTPMiddleware):
+    _WIDGET_HEADERS = {
+        "Access-Control-Allow-Origin":  "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "X-Widget-Key, Content-Type",
+        "Access-Control-Max-Age":       "3600",
+    }
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        if not request.url.path.startswith("/api/widget"):
+            return await call_next(request)
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=self._WIDGET_HEADERS)
+        response = await call_next(request)
+        for k, v in self._WIDGET_HEADERS.items():
+            response.headers[k] = v
+        return response
 
 
 def create_app() -> FastAPI:
@@ -39,12 +60,15 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
+    app.add_middleware(_WidgetCORSMiddleware)   
+
     prefix = "/api"
     app.include_router(auth.router, prefix=prefix)
     app.include_router(tickets.router, prefix=prefix)
     app.include_router(departments.router, prefix=prefix)
     app.include_router(employees.router, prefix=prefix)
     app.include_router(dashboard.router, prefix=prefix)
+    app.include_router(widget.router, prefix=prefix)
     app.include_router(settings_router.router, prefix=prefix)
 
     @app.get("/api")
