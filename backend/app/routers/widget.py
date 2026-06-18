@@ -25,9 +25,9 @@ class WidgetTicketIn(BaseModel):
     priority: Literal["Low", "Medium", "High", "Urgent"] = "Medium"
     department: Optional[str] = None
     app: Optional[str] = None
-    assignee_id: Optional[str] = None        # ← new
-    assignee_name: Optional[str] = None      # ← new
-    assignee_email: Optional[str] = None     # ← new
+    assignee_id: Optional[str] = None
+    assignee_name: Optional[str] = None
+    assignee_email: Optional[str] = None
 
 
 @router.post("/widget/tickets")
@@ -54,8 +54,8 @@ def create_widget_ticket(
         "created_by":       None,
         "created_by_name":  email.split("@")[0],
         "created_by_email": email,
-        "assignee_id":      body.assignee_id,    # ← changed
-        "assignee_name":    body.assignee_name,  # ← changed
+        "assignee_id":      body.assignee_id,
+        "assignee_name":    body.assignee_name,
         "source":           source,
         "due_at":           None,
         "is_escalated":     0,
@@ -69,7 +69,7 @@ def create_widget_ticket(
     logger.info("Widget ticket created: %s from %s (app=%s)", ticket["code"], email, source)
 
     try:
-        if body.assignee_email:                                          # ← changed
+        if body.assignee_email:
             whatsapp.send_ticket_to_assignee(ticket, body.assignee_email)
         else:
             whatsapp.send_new_ticket_to_department(ticket)
@@ -162,8 +162,15 @@ def list_department_members(
     dept_id = dept_rows[0]["id"]
     members = (
         _sb().table("users")
-        .select("id,full_name,email")
+        .select("*")
         .eq("department_id", dept_id)
         .execute().data or []
     )
-    return [{"id": m["id"], "name": m.get("full_name") or m.get("email", ""), "email": m.get("email", "")} for m in members]
+    result = []
+    for m in members:
+        name = (
+            m.get("full_name") or m.get("name") or
+            m.get("username") or m.get("email") or ""
+        )
+        result.append({"id": m["id"], "name": name, "email": m.get("email", "")})
+    return result
