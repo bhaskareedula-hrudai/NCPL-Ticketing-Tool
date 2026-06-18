@@ -25,6 +25,9 @@ class WidgetTicketIn(BaseModel):
     priority: Literal["Low", "Medium", "High", "Urgent"] = "Medium"
     department: Optional[str] = None
     app: Optional[str] = None
+    assignee_id: Optional[str] = None        # ← new
+    assignee_name: Optional[str] = None      # ← new
+    assignee_email: Optional[str] = None     # ← new
 
 
 @router.post("/widget/tickets")
@@ -51,8 +54,8 @@ def create_widget_ticket(
         "created_by":       None,
         "created_by_name":  email.split("@")[0],
         "created_by_email": email,
-        "assignee_id":      None,
-        "assignee_name":    None,
+        "assignee_id":      body.assignee_id,    # ← changed
+        "assignee_name":    body.assignee_name,  # ← changed
         "source":           source,
         "due_at":           None,
         "is_escalated":     0,
@@ -66,9 +69,12 @@ def create_widget_ticket(
     logger.info("Widget ticket created: %s from %s (app=%s)", ticket["code"], email, source)
 
     try:
-        whatsapp.send_new_ticket_to_department(ticket)
+        if body.assignee_email:                                          # ← changed
+            whatsapp.send_ticket_to_assignee(ticket, body.assignee_email)
+        else:
+            whatsapp.send_new_ticket_to_department(ticket)
     except Exception as exc:
-        logger.warning("Department WhatsApp notification failed for %s: %s", ticket["code"], exc)
+        logger.warning("WhatsApp notification failed for %s: %s", ticket["code"], exc)
 
     return {"id": ticket["id"], "code": ticket["code"], "status": "Open"}
 
@@ -87,7 +93,7 @@ def list_widget_tickets(
 
     q = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_at,source")
+        .select("id,code,title,status,priority,department,created_at,source,assignee_name")
         .eq("created_by_email", email)
     )
     if app:
@@ -134,7 +140,7 @@ def list_department_tickets(
     dept_name = depts[0]["name"]
     q = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source")
+        .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source,assignee_name")
         .eq("department", dept_name)
     )
     if app:
@@ -142,3 +148,22 @@ def list_department_tickets(
 
     rows = q.order("created_at", desc=True).execute().data or []
     return rows
+
+
+@router.get("/widget/department-members")
+def list_department_members(
+    department: str = Query(..., description="Department name"),
+    x_widget_key: Optional[str] = Header(None),
+):
+    _require_widget_key(x_widget_key)
+    dept_rows = _sb().table("departments").select("id").eq("name", department.strip()).execute().data or []
+    if not dept_rows:
+        return []
+    dept_id = dept_rows[0]["id"]
+    members = (
+        _sb().table("users")
+        .select("id,full_name,email")
+        .eq("department_id", dept_id)
+        .execute().data or []
+    )
+    return [{"id": m["id"], "name": m.get("full_name") or m.get("email", ""), "email": m.get("email", "")} for m in members]

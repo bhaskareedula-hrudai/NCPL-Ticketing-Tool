@@ -174,6 +174,35 @@ def send_new_ticket_to_department(ticket: dict) -> bool:
         logger.warning("Department notification failed for %s: %s", ticket.get("code"), exc)
         return send_new_ticket_to_admin(ticket)
 
+def send_ticket_to_assignee(ticket: dict, assignee_email: str) -> bool:
+    """Send WhatsApp directly to the assigned person."""
+    try:
+        users = _sb().table("users").select("phone_number").eq("email", assignee_email).execute().data or []
+        phone = (users[0].get("phone_number") or "").strip() if users else ""
+    except Exception:
+        phone = ""
+
+    if not phone:
+        logger.warning("No phone for assignee %s; falling back to dept notify", assignee_email)
+        return send_new_ticket_to_department(ticket)
+
+    ticket_url = f"{config.FRONTEND_URL}/tickets/{ticket['id']}"
+    source = ticket.get("source") or "Widget"
+    assignee_name = ticket.get("assignee_name") or assignee_email
+    message = (
+        f"🎫 You have been assigned a ticket ({source})\n\n"
+        f"Ticket  : {ticket.get('code', '')}\n"
+        f"Title   : {ticket.get('title', '')}\n"
+        f"Priority: {ticket.get('priority', '')}\n"
+        f"From    : {ticket.get('created_by_email', '')}\n\n"
+        f"View: {ticket_url}\n\n"
+        f"— NCPL Ticketing System"
+    )
+    result = _do_send(phone, message)
+    if result:
+        logger.info("WhatsApp sent to assignee %s for ticket %s", phone, ticket.get("code"))
+    return result
+
 def send_test_message() -> bool:
     phone_map = _get_phone_map()
     if not phone_map:
