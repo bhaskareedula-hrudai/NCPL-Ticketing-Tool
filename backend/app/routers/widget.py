@@ -160,17 +160,18 @@ def list_department_members(
     if not dept_rows:
         return []
     dept_id = dept_rows[0]["id"]
-    members = (
-        _sb().table("users")
-        .select("*")
-        .eq("department_id", dept_id)
-        .execute().data or []
-    )
-    result = []
-    for m in members:
-        name = (
-            m.get("full_name") or m.get("name") or
-            m.get("username") or m.get("email") or ""
+    try:
+        members = (
+            _sb().table("users")
+            .select("id,full_name,email,department_id")
+            .eq("department_id", dept_id)
+            .execute().data or []
         )
-        result.append({"id": m["id"], "name": name, "email": m.get("email", "")})
-    return result
+        result = []
+        for m in members:
+            name = m.get("full_name") or m.get("name") or m.get("email") or ""
+            result.append({"id": m["id"], "name": name, "email": m.get("email", "")})
+        return result
+    except Exception as e:
+        logger.error("department-members error dept=%s: %s", department, e)
+        return []
