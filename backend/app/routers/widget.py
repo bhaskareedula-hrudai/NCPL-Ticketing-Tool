@@ -31,7 +31,7 @@ class WidgetTicketIn(BaseModel):
 
 
 class TicketActionIn(BaseModel):
-    action: Literal["start", "resolve", "close", "escalate"]
+    action: Literal["start", "resolve", "close", "escalate", "reopen"]
     email: str
 
 
@@ -117,20 +117,44 @@ def list_assigned_tickets(
     if not email or "@" not in email:
         raise HTTPException(400, "Valid email is required")
 
-    users = _sb().table("users").select("user_id").eq("email", email).execute().data or []
+    users = _sb().table("users").select("user_id,department").eq("email", email).execute().data or []
     if not users:
         return []
 
     user_id = users[0]["user_id"]
-    q = (
+    dept = (users[0].get("department") or "").strip()
+
+    seen_ids = set()
+    result = []
+
+    # Tickets specifically assigned to this person by user_id
+    q1 = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email")
+        .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email,assignee_name")
         .eq("assignee_id", user_id)
     )
     if app:
-        q = q.eq("source", app.strip())
+        q1 = q1.eq("source", app.strip())
+    for t in (q1.execute().data or []):
+        seen_ids.add(t["id"])
+        result.append(t)
 
-    return q.order("created_at", desc=True).execute().data or []
+    # All tickets for this person's department (covers unassigned dept tickets)
+    if dept:
+        q2 = (
+            _sb().table("tickets")
+            .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email,assignee_name")
+            .eq("department", dept)
+        )
+        if app:
+            q2 = q2.eq("source", app.strip())
+        for t in (q2.execute().data or []):
+            if t["id"] not in seen_ids:
+                seen_ids.add(t["id"])
+                result.append(t)
+
+    result.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return result
 
 
 @router.get("/widget/department-members")
@@ -209,7 +233,7 @@ def update_ticket_status(
 
     rows = (
         _sb().table("tickets")
-        .select("id,status,created_by_email,assignee_id,is_escalated")
+        .select("id,status,created_by_email,assignee_id,is_escalated,department")
         .eq("id", ticket_id).execute().data or []
     )
     if not rows:
@@ -217,11 +241,21 @@ def update_ticket_status(
     ticket = rows[0]
 
     is_creator = (ticket.get("created_by_email") or "").lower() == email
+
+    # Check if user is the specific assignee
     is_assignee = False
     if ticket.get("assignee_id"):
         u = _sb().table("users").select("user_id").eq("email", email).execute().data or []
         if u and u[0]["user_id"] == ticket["assignee_id"]:
             is_assignee = True
+
+    # Also allow any department member to act as assignee
+    if not is_assignee:
+        dept = (ticket.get("department") or "").strip()
+        if dept:
+            u = _sb().table("users").select("user_id,department").eq("email", email).execute().data or []
+            if u and (u[0].get("department") or "").strip() == dept:
+                is_assignee = True
 
     if not is_creator and not is_assignee:
         raise HTTPException(403, "Not authorized to update this ticket")
@@ -229,9 +263,11 @@ def update_ticket_status(
     ts = now()
     if body.action == "start":
         if not is_assignee:
-            raise HTTPException(403, "Only the assignee can start a ticket")
+            raise HTTPException(403, "Only a department member can start a ticket")
         update_data = {"status": "In Progress", "updated_at": ts}
     elif body.action == "resolve":
+        if not is_assignee:
+            raise HTTPException(403, "Only a department member can resolve a ticket")
         update_data = {"status": "Resolved", "resolved_at": ts, "updated_at": ts}
     elif body.action == "close":
         update_data = {"status": "Closed", "closed_at": ts, "updated_at": ts}
@@ -239,6 +275,10 @@ def update_ticket_status(
         if not is_creator:
             raise HTTPException(403, "Only the ticket creator can escalate")
         update_data = {"is_escalated": 1, "escalated_at": ts, "updated_at": ts}
+    elif body.action == "reopen":
+        if not is_creator:
+            raise HTTPException(403, "Only the ticket creator can reopen")
+        update_data = {"status": "In Progress", "resolved_at": None, "updated_at": ts}
     else:
         raise HTTPException(400, "Unknown action")
 
