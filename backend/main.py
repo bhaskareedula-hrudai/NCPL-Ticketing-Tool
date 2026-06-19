@@ -24,7 +24,7 @@ logger = logging.getLogger("ncpl")
 class _WidgetCORSMiddleware(BaseHTTPMiddleware):
     _WIDGET_HEADERS = {
         "Access-Control-Allow-Origin":  "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, PATCH , OPTIONS",
         "Access-Control-Allow-Headers": "X-Widget-Key, Content-Type",
         "Access-Control-Max-Age":       "3600",
     }
