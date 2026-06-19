@@ -30,6 +30,11 @@ class WidgetTicketIn(BaseModel):
     assignee_email: Optional[str] = None
 
 
+class TicketActionIn(BaseModel):
+    action: Literal["start", "resolve", "close", "escalate"]
+    email: str
+
+
 @router.post("/widget/tickets")
 def create_widget_ticket(
     body: WidgetTicketIn,
@@ -90,7 +95,7 @@ def list_widget_tickets(
 
     q = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_at,source")
+        .select("id,code,title,status,priority,department,created_at,source,assignee_name")
         .eq("created_by_email", email)
     )
     if app:
@@ -188,3 +193,55 @@ def list_department_tickets(
 
     rows = q.order("created_at", desc=True).execute().data or []
     return rows
+
+
+@router.patch("/widget/tickets/{ticket_id}/status")
+def update_ticket_status(
+    ticket_id: str,
+    body: TicketActionIn,
+    x_widget_key: Optional[str] = Header(None),
+):
+    _require_widget_key(x_widget_key)
+
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "Valid email is required")
+
+    rows = (
+        _sb().table("tickets")
+        .select("id,status,created_by_email,assignee_id,is_escalated")
+        .eq("id", ticket_id).execute().data or []
+    )
+    if not rows:
+        raise HTTPException(404, "Ticket not found")
+    ticket = rows[0]
+
+    is_creator = (ticket.get("created_by_email") or "").lower() == email
+    is_assignee = False
+    if ticket.get("assignee_id"):
+        u = _sb().table("users").select("user_id").eq("email", email).execute().data or []
+        if u and u[0]["user_id"] == ticket["assignee_id"]:
+            is_assignee = True
+
+    if not is_creator and not is_assignee:
+        raise HTTPException(403, "Not authorized to update this ticket")
+
+    ts = now()
+    if body.action == "start":
+        if not is_assignee:
+            raise HTTPException(403, "Only the assignee can start a ticket")
+        update_data = {"status": "In Progress", "updated_at": ts}
+    elif body.action == "resolve":
+        update_data = {"status": "Resolved", "resolved_at": ts, "updated_at": ts}
+    elif body.action == "close":
+        update_data = {"status": "Closed", "closed_at": ts, "updated_at": ts}
+    elif body.action == "escalate":
+        if not is_creator:
+            raise HTTPException(403, "Only the ticket creator can escalate")
+        update_data = {"is_escalated": 1, "escalated_at": ts, "updated_at": ts}
+    else:
+        raise HTTPException(400, "Unknown action")
+
+    _sb().table("tickets").update(update_data).eq("id", ticket_id).execute()
+    logger.info("Widget ticket %s action=%s by %s", ticket_id, body.action, email)
+    return {"id": ticket_id, "action": body.action}
