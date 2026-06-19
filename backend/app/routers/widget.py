@@ -123,21 +123,16 @@ def list_department_tickets(
         raise HTTPException(400, "Valid staff email is required")
 
     users = (
-        _sb().table("users").select("department_id")
+        _sb().table("users").select("department")
         .eq("email", staff_email).execute().data or []
     )
     if not users:
         raise HTTPException(403, "Staff member not found")
 
-    dept_id = users[0].get("department_id")
-    if not dept_id:
+    dept_name = (users[0].get("department") or "").strip()
+    if not dept_name:
         raise HTTPException(403, "Staff member has no department assigned")
 
-    depts = _sb().table("departments").select("name").eq("id", dept_id).execute().data or []
-    if not depts:
-        raise HTTPException(403, "Department not found")
-
-    dept_name = depts[0]["name"]
     q = (
         _sb().table("tickets")
         .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source,assignee_name")
@@ -156,22 +151,22 @@ def list_department_members(
     x_widget_key: Optional[str] = Header(None),
 ):
     _require_widget_key(x_widget_key)
-    dept_rows = _sb().table("departments").select("id").eq("name", department.strip()).execute().data or []
-    if not dept_rows:
+
+    dept_name = department.strip()
+    if not dept_name:
         return []
-    dept_id = dept_rows[0]["id"]
+
     try:
         members = (
             _sb().table("users")
-            .select("id,full_name,email,department_id")
-            .eq("department_id", dept_id)
+            .select("user_id,name,email")
+            .eq("department", dept_name)
             .execute().data or []
         )
-        result = []
-        for m in members:
-            name = m.get("full_name") or m.get("name") or m.get("email") or ""
-            result.append({"id": m["id"], "name": name, "email": m.get("email", "")})
-        return result
+        return [
+            {"id": m["user_id"], "name": m.get("name") or m.get("email", ""), "email": m.get("email", "")}
+            for m in members
+        ]
     except Exception as e:
         logger.error("department-members error dept=%s: %s", department, e)
         return []
