@@ -54,8 +54,8 @@ def create_widget_ticket(
         "created_by":       None,
         "created_by_name":  email.split("@")[0],
         "created_by_email": email,
-        "assignee_id":      body.assignee_id,
-        "assignee_name":    body.assignee_name,
+        "assignee_id":      body.assignee_id or None,
+        "assignee_name":    body.assignee_name or None,
         "source":           source,
         "due_at":           None,
         "is_escalated":     0,
@@ -69,12 +69,9 @@ def create_widget_ticket(
     logger.info("Widget ticket created: %s from %s (app=%s)", ticket["code"], email, source)
 
     try:
-        if body.assignee_email:
-            whatsapp.send_ticket_to_assignee(ticket, body.assignee_email)
-        else:
-            whatsapp.send_new_ticket_to_department(ticket)
+        whatsapp.send_new_ticket_to_department(ticket)
     except Exception as exc:
-        logger.warning("WhatsApp notification failed for %s: %s", ticket["code"], exc)
+        logger.warning("Department WhatsApp notification failed for %s: %s", ticket["code"], exc)
 
     return {"id": ticket["id"], "code": ticket["code"], "status": "Open"}
 
@@ -93,7 +90,7 @@ def list_widget_tickets(
 
     q = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_at,source,assignee_name")
+        .select("id,code,title,status,priority,department,created_at,source")
         .eq("created_by_email", email)
     )
     if app:
@@ -101,6 +98,54 @@ def list_widget_tickets(
 
     rows = q.order("created_at", desc=True).execute().data or []
     return rows
+
+
+@router.get("/widget/assigned-tickets")
+def list_assigned_tickets(
+    email: str = Query(..., description="Assignee email"),
+    app: Optional[str] = Query(None),
+    x_widget_key: Optional[str] = Header(None),
+):
+    _require_widget_key(x_widget_key)
+
+    email = email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "Valid email is required")
+
+    users = _sb().table("users").select("user_id").eq("email", email).execute().data or []
+    if not users:
+        return []
+
+    user_id = users[0]["user_id"]
+    q = (
+        _sb().table("tickets")
+        .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email")
+        .eq("assignee_id", user_id)
+    )
+    if app:
+        q = q.eq("source", app.strip())
+
+    return q.order("created_at", desc=True).execute().data or []
+
+
+@router.get("/widget/department-members")
+def list_department_members(
+    department: str = Query(..., description="Department name"),
+    x_widget_key: Optional[str] = Header(None),
+):
+    _require_widget_key(x_widget_key)
+
+    dept_name = department.strip()
+    if not dept_name:
+        raise HTTPException(400, "Department name is required")
+
+    members = (
+        _sb().table("users")
+        .select("user_id,name,email")
+        .eq("department", dept_name)
+        .execute().data or []
+    )
+    return [{"id": m["user_id"], "name": m.get("name") or m.get("email", ""), "email": m.get("email", "")} for m in members]
 
 
 @router.get("/widget/departments")
@@ -135,7 +180,7 @@ def list_department_tickets(
 
     q = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source,assignee_name")
+        .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source")
         .eq("department", dept_name)
     )
     if app:
@@ -143,30 +188,3 @@ def list_department_tickets(
 
     rows = q.order("created_at", desc=True).execute().data or []
     return rows
-
-
-@router.get("/widget/department-members")
-def list_department_members(
-    department: str = Query(..., description="Department name"),
-    x_widget_key: Optional[str] = Header(None),
-):
-    _require_widget_key(x_widget_key)
-
-    dept_name = department.strip()
-    if not dept_name:
-        return []
-
-    try:
-        members = (
-            _sb().table("users")
-            .select("user_id,name,email")
-            .eq("department", dept_name)
-            .execute().data or []
-        )
-        return [
-            {"id": m["user_id"], "name": m.get("name") or m.get("email", ""), "email": m.get("email", "")}
-            for m in members
-        ]
-    except Exception as e:
-        logger.error("department-members error dept=%s: %s", department, e)
-        return []
