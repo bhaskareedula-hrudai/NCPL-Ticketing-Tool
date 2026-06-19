@@ -36,9 +36,11 @@ def create_widget_ticket(
     x_widget_key: Optional[str] = Header(None),
 ):
     _require_widget_key(x_widget_key)
+
     email = body.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "Valid email is required")
+
     source = (body.app or "Widget").strip()
     ts = now()
     ticket = {
@@ -65,23 +67,27 @@ def create_widget_ticket(
     }
     db_insert("tickets", ticket)
     logger.info("Widget ticket created: %s from %s (app=%s)", ticket["code"], email, source)
+
     try:
         whatsapp.send_new_ticket_to_department(ticket)
     except Exception as exc:
         logger.warning("Department WhatsApp notification failed for %s: %s", ticket["code"], exc)
+
     return {"id": ticket["id"], "code": ticket["code"], "status": "Open"}
 
 
 @router.get("/widget/tickets")
 def list_widget_tickets(
-    email: str = Query(...),
-    app: Optional[str] = Query(None),
+    email: str = Query(..., description="User email to filter tickets"),
+    app:   Optional[str] = Query(None, description="App name to filter tickets"),
     x_widget_key: Optional[str] = Header(None),
 ):
     _require_widget_key(x_widget_key)
+
     email = email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "Valid email is required")
+
     q = (
         _sb().table("tickets")
         .select("id,code,title,status,priority,department,created_at,source,assignee_name")
@@ -89,16 +95,19 @@ def list_widget_tickets(
     )
     if app:
         q = q.eq("source", app.strip())
-    return q.order("created_at", desc=True).execute().data or []
+
+    rows = q.order("created_at", desc=True).execute().data or []
+    return rows
 
 
 @router.get("/widget/assigned-tickets")
 def list_assigned_tickets(
-    email: str = Query(...),
+    email: str = Query(..., description="Assignee email"),
     app: Optional[str] = Query(None),
     x_widget_key: Optional[str] = Header(None),
 ):
     _require_widget_key(x_widget_key)
+
     email = email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "Valid email is required")
@@ -112,7 +121,7 @@ def list_assigned_tickets(
     seen_ids: set = set()
     result = []
 
-    # Query 1: tickets specifically assigned to this user
+    # Query 1: tickets specifically assigned to this user by user_id
     q1 = (
         _sb().table("tickets")
         .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email,assignee_name")
@@ -144,13 +153,15 @@ def list_assigned_tickets(
 
 @router.get("/widget/department-members")
 def list_department_members(
-    department: str = Query(...),
+    department: str = Query(..., description="Department name"),
     x_widget_key: Optional[str] = Header(None),
 ):
     _require_widget_key(x_widget_key)
+
     dept_name = department.strip()
     if not dept_name:
         raise HTTPException(400, "Department name is required")
+
     members = (
         _sb().table("users")
         .select("user_id,name,email")
@@ -169,20 +180,27 @@ def list_departments(x_widget_key: Optional[str] = Header(None)):
 
 @router.get("/widget/department-tickets")
 def list_department_tickets(
-    staff_email: str = Query(...),
-    app: Optional[str] = Query(None),
+    staff_email: str = Query(..., description="Staff member email to resolve department"),
+    app: Optional[str] = Query(None, description="App name to filter tickets"),
     x_widget_key: Optional[str] = Header(None),
 ):
     _require_widget_key(x_widget_key)
+
     staff_email = staff_email.strip().lower()
     if not staff_email or "@" not in staff_email:
         raise HTTPException(400, "Valid staff email is required")
-    users = _sb().table("users").select("department").eq("email", staff_email).execute().data or []
+
+    users = (
+        _sb().table("users").select("department")
+        .eq("email", staff_email).execute().data or []
+    )
     if not users:
         raise HTTPException(403, "Staff member not found")
+
     dept_name = (users[0].get("department") or "").strip()
     if not dept_name:
         raise HTTPException(403, "Staff member has no department assigned")
+
     q = (
         _sb().table("tickets")
         .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source")
@@ -190,12 +208,36 @@ def list_department_tickets(
     )
     if app:
         q = q.eq("source", app.strip())
-    return q.order("created_at", desc=True).execute().data or []
+
+    rows = q.order("created_at", desc=True).execute().data or []
+    return rows
+
+
+@router.get("/widget/assigned-by-dept")
+def list_assigned_by_dept(
+    department: str = Query(..., description="Department name"),
+    app: Optional[str] = Query(None),
+    x_widget_key: Optional[str] = Header(None),
+):
+    _require_widget_key(x_widget_key)
+    dept_name = department.strip()
+    if not dept_name:
+        raise HTTPException(400, "Department is required")
+    q = (
+        _sb().table("tickets")
+        .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source,assignee_name")
+        .eq("department", dept_name)
+    )
+    if app:
+        q = q.eq("source", app.strip())
+    rows = q.order("created_at", desc=True).execute().data or []
+    return rows
 
 
 class TicketActionIn(BaseModel):
     action: Literal["start", "resolve", "close", "escalate", "reopen"]
     email: str
+    acting_department: Optional[str] = None
 
 
 @router.patch("/widget/tickets/{ticket_id}/status")
@@ -205,6 +247,7 @@ def update_ticket_status(
     x_widget_key: Optional[str] = Header(None),
 ):
     _require_widget_key(x_widget_key)
+
     email = body.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "Valid email is required")
@@ -222,16 +265,21 @@ def update_ticket_status(
     is_creator = (ticket.get("created_by_email") or "").lower() == email
     is_assignee = False
 
+    # Check if specifically assigned to this user
     if ticket.get("assignee_id"):
         u = _sb().table("users").select("user_id").eq("email", email).execute().data or []
         if u and u[0]["user_id"] == ticket["assignee_id"]:
             is_assignee = True
 
+    # Any member of the ticket's department also counts as assignee
     if not is_assignee:
         dept = (ticket.get("department") or "").strip()
         if dept:
             u = _sb().table("users").select("user_id,department").eq("email", email).execute().data or []
             if u and (u[0].get("department") or "").strip() == dept:
+                is_assignee = True
+            elif not u and body.acting_department and body.acting_department.strip() == dept:
+                # User not in users table; allow if they selected the matching department
                 is_assignee = True
 
     if not is_creator and not is_assignee:
