@@ -214,7 +214,6 @@ def list_department_tickets(
 @router.get("/widget/assigned-by-dept")
 def list_assigned_by_dept(
     department: str = Query(..., description="Department name"),
-    app: Optional[str] = Query(None),
     name: Optional[str] = Query(None, description="Filter by assignee name"),
     x_widget_key: Optional[str] = Header(None),
 ):
@@ -227,8 +226,6 @@ def list_assigned_by_dept(
         .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source,assignee_name")
         .eq("department", dept_name)
     )
-    if app:
-        q = q.eq("source", app.strip())
     if name:
         q = q.eq("assignee_name", name.strip())
     rows = q.order("created_at", desc=True).execute().data or []
