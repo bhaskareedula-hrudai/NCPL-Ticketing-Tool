@@ -121,7 +121,6 @@ def list_assigned_tickets(
     seen_ids: set = set()
     result = []
 
-    # Query 1: tickets specifically assigned to this user by user_id
     q1 = (
         _sb().table("tickets")
         .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email,assignee_name")
@@ -133,7 +132,6 @@ def list_assigned_tickets(
         seen_ids.add(t["id"])
         result.append(t)
 
-    # Query 2: ALL tickets for the user's department (catches unassigned dept tickets)
     if dept:
         q2 = (
             _sb().table("tickets")
@@ -236,8 +234,9 @@ def list_assigned_by_dept(
 
 class TicketActionIn(BaseModel):
     action: Literal["start", "resolve", "close", "escalate", "reopen"]
-    email: str
+    email: Optional[str] = None
     acting_department: Optional[str] = None
+    acting_name: Optional[str] = None
 
 
 @router.patch("/widget/tickets/{ticket_id}/status")
@@ -248,8 +247,13 @@ def update_ticket_status(
 ):
     _require_widget_key(x_widget_key)
 
-    email = body.email.strip().lower()
-    if not email or "@" not in email:
+    email = (body.email or "").strip().lower()
+    acting_dept = (body.acting_department or "").strip()
+    acting_name = (body.acting_name or "").strip()
+
+    if not email and not acting_dept:
+        raise HTTPException(400, "Either email or acting_department is required")
+    if email and "@" not in email:
         raise HTTPException(400, "Valid email is required")
 
     rows = (
@@ -261,26 +265,27 @@ def update_ticket_status(
     if not rows:
         raise HTTPException(404, "Ticket not found")
     ticket = rows[0]
+    ticket_dept = (ticket.get("department") or "").strip()
 
-    is_creator = (ticket.get("created_by_email") or "").lower() == email
+    is_creator = False
     is_assignee = False
 
-    # Check if specifically assigned to this user
-    if ticket.get("assignee_id"):
-        u = _sb().table("users").select("user_id").eq("email", email).execute().data or []
-        if u and u[0]["user_id"] == ticket["assignee_id"]:
-            is_assignee = True
+    if email:
+        is_creator = (ticket.get("created_by_email") or "").lower() == email
 
-    # Any member of the ticket's department also counts as assignee
-    if not is_assignee:
-        dept = (ticket.get("department") or "").strip()
-        if dept:
+        if ticket.get("assignee_id"):
+            u = _sb().table("users").select("user_id").eq("email", email).execute().data or []
+            if u and u[0]["user_id"] == ticket["assignee_id"]:
+                is_assignee = True
+
+        if not is_assignee and ticket_dept:
             u = _sb().table("users").select("user_id,department").eq("email", email).execute().data or []
-            if u and (u[0].get("department") or "").strip() == dept:
+            if u and (u[0].get("department") or "").strip() == ticket_dept:
                 is_assignee = True
-            elif not u and body.acting_department and body.acting_department.strip() == dept:
-                # User not in users table; allow if they selected the matching department
-                is_assignee = True
+
+    # Department-based auth — no email needed (staff not in users table)
+    if acting_dept and acting_dept == ticket_dept:
+        is_assignee = True
 
     if not is_creator and not is_assignee:
         raise HTTPException(403, "Not authorized to update this ticket")
@@ -300,5 +305,6 @@ def update_ticket_status(
         raise HTTPException(400, "Unknown action")
 
     _sb().table("tickets").update(update_data).eq("id", ticket_id).execute()
-    logger.info("Widget ticket %s action=%s by %s", ticket_id, body.action, email)
+    actor = acting_name or email or acting_dept
+    logger.info("Widget ticket %s action=%s by %s", ticket_id, body.action, actor)
     return {"id": ticket_id, "action": body.action}
