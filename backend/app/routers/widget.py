@@ -215,6 +215,7 @@ def list_department_tickets(
 def list_assigned_by_dept(
     department: str = Query(..., description="Department name"),
     app: Optional[str] = Query(None),
+    name: Optional[str] = Query(None, description="Filter by assignee name"),
     x_widget_key: Optional[str] = Header(None),
 ):
     _require_widget_key(x_widget_key)
@@ -228,6 +229,8 @@ def list_assigned_by_dept(
     )
     if app:
         q = q.eq("source", app.strip())
+    if name:
+        q = q.eq("assignee_name", name.strip())
     rows = q.order("created_at", desc=True).execute().data or []
     return rows
 
@@ -283,7 +286,6 @@ def update_ticket_status(
             if u and (u[0].get("department") or "").strip() == ticket_dept:
                 is_assignee = True
 
-    # Department-based auth — no email needed (staff not in users table)
     if acting_dept and acting_dept == ticket_dept:
         is_assignee = True
 
