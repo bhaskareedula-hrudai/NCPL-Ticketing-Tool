@@ -28,6 +28,8 @@ class WidgetTicketIn(BaseModel):
     assignee_id: Optional[str] = None
     assignee_name: Optional[str] = None
     assignee_email: Optional[str] = None
+    attachment_data: Optional[str] = None
+    attachment_name: Optional[str] = None
 
 
 @router.post("/widget/tickets")
@@ -57,6 +59,8 @@ def create_widget_ticket(
         "assignee_id":      body.assignee_id or None,
         "assignee_name":    body.assignee_name or None,
         "source":           source,
+        "attachment_data":  body.attachment_data or None,
+        "attachment_name":  body.attachment_name or None,
         "due_at":           None,
         "is_escalated":     0,
         "escalated_at":     None,
@@ -90,7 +94,7 @@ def list_widget_tickets(
 
     q = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_at,source,assignee_name")
+        .select("id,code,title,status,priority,department,created_at,source,assignee_name,attachment_data,attachment_name")
         .eq("created_by_email", email)
     )
     if app:
@@ -123,7 +127,7 @@ def list_assigned_tickets(
 
     q1 = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email,assignee_name")
+        .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email,assignee_name,attachment_data,attachment_name")
         .eq("assignee_id", user_id)
     )
     if app:
@@ -135,7 +139,7 @@ def list_assigned_tickets(
     if dept:
         q2 = (
             _sb().table("tickets")
-            .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email,assignee_name")
+            .select("id,code,title,status,priority,department,created_at,source,created_by_name,created_by_email,assignee_name,attachment_data,attachment_name")
             .eq("department", dept)
         )
         if app:
@@ -223,7 +227,7 @@ def list_assigned_by_dept(
         raise HTTPException(400, "Department is required")
     q = (
         _sb().table("tickets")
-        .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source,assignee_name")
+        .select("id,code,title,status,priority,department,created_by_name,created_by_email,created_at,source,assignee_name,attachment_data,attachment_name")
         .eq("department", dept_name)
     )
     if name:
